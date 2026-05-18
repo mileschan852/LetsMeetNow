@@ -1,0 +1,907 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import './App.css'
+import lmnLogo from './assets/lmn-logo.svg'
+import { t, tZodiac, type Lang, getLangLabel } from '../lib/i18n'
+import {
+  MapPin, X, MessageCircle, LocateFixed, RefreshCw,
+  Eye, EyeOff, ArrowLeft, Lock, Gift,
+} from 'lucide-react'
+import {
+  upsertUser, fetchNearby, setOnlineStatus, fetchUserUnlockStatus,
+  getActiveRaffle, buyRaffleTicket, createRaffle,
+  getZodiac, getZodiacEmoji, getAge, type DbUser, type Raffle,
+} from '../lib/supabase'
+import { getTg, getUserId, makeStorage } from '../lib/storage'
+
+const storage = makeStorage('lmn')
+
+// ─── Types ───────────────────────────────────────────────────────────
+
+interface UserProfile {
+  id: number
+  name: string
+  tgPhotoUrl: string
+  height: number
+  weight: number
+  lat: number
+  lng: number
+  gender: string          // Male | Female
+  seekingGender: string   // Men | Women
+  dob: string | null
+  seekingToday: string | null  // Just Browsing | Chat | Meetup | Webcam
+  meetupType: string | null    // Coffee | Meals | Outdoor | Charity | Bar & Parties | Bed
+  isOnline: boolean
+  isOwn: boolean
+  updatedAt: string
+  distance?: number
+  isInvisible: boolean
+  openToMessages: boolean
+  hideAgeUntil: string | null
+}
+
+type View = 'MAIN' | 'OWN_PROFILE' | 'AGE_GATE' | 'GENDER_SETUP'
+
+const ADMIN_IDS = [5202742795, 725368127]
+function isAdminUser(user: any) { return !!user?.id && ADMIN_IDS.includes(user.id) }
+
+const ZODIAC_SIGNS = [
+  { name: 'Aries', emoji: '\u2648' }, { name: 'Taurus', emoji: '\u2649' },
+  { name: 'Gemini', emoji: '\u264A' }, { name: 'Cancer', emoji: '\u264B' },
+  { name: 'Leo', emoji: '\u264C' }, { name: 'Virgo', emoji: '\u264D' },
+  { name: 'Libra', emoji: '\u264E' }, { name: 'Scorpio', emoji: '\u264F' },
+  { name: 'Sagittarius', emoji: '\u2650' }, { name: 'Capricorn', emoji: '\u2651' },
+  { name: 'Aquarius', emoji: '\u2652' }, { name: 'Pisces', emoji: '\u2653' },
+]
+
+const GENDERS = ['Male', 'Female']
+const SEEKING_GENDERS = ['Men', 'Women']
+const SEEKING_TODAY_OPTS = ['Just Browsing', 'Chat', 'Meetup', 'Webcam']
+const MEETUP_TYPES = ['Coffee', 'Meals', 'Outdoor', 'Charity', 'Bar & Parties', 'Bed']
+const AGE_FILTERS = ['any', 'older', 'same', 'younger']
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function isRecentlyActive(updatedAt?: string): boolean {
+  if (!updatedAt) return false
+  return Date.now() - new Date(updatedAt).getTime() < 60 * 60 * 1000
+}
+
+function formatDist(d?: number): string {
+  if (!d) return ''
+  if (d < 1) return `${(d * 1000).toFixed(0)}m`
+  return `${d.toFixed(1)}km`
+}
+
+function getTimeAgo(updatedAt?: string): string {
+  if (!updatedAt) return ''
+  const min = Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60000)
+  if (min < 1) return 'now'
+  if (min < 60) return `${min}m`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h`
+  return `${Math.floor(hr / 24)}d`
+}
+
+function dbToProfile(u: DbUser, ownId: number): UserProfile {
+  const dist = u.lat && u.lng ? undefined : undefined // calculated client-side
+  return {
+    id: u.id, name: u.name || 'User', tgPhotoUrl: u.photo_url || '',
+    height: u.height || 0, weight: u.weight || 0, lat: u.lat || 0, lng: u.lng || 0,
+    gender: u.gender || '', seekingGender: u.seeking_gender || '',
+    dob: u.dob || null, seekingToday: u.seeking_today || null, meetupType: u.meetup_type || null,
+    isOnline: u.is_online || false, isOwn: u.id === ownId, updatedAt: u.updated_at || '',
+    distance: dist, isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
+    openToMessages: u.open_to_messages ?? true, hideAgeUntil: u.hide_age_until || null,
+  }
+}
+
+// ─── Components ────────────────────────────────────────────────────
+
+function AgeGate({ onConfirm, lang }: { onConfirm: (dob: string) => void; lang: Lang }) {
+  const [dob, setDob] = useState('')
+  const [err, setErr] = useState('')
+  return (
+    <div className="fixed inset-0 z-[60] bg-[#0A0A0A] flex flex-col items-center justify-center px-6">
+      <img src={lmnLogo} alt="LMN" className="w-20 h-20 rounded-2xl mb-4" />
+      <h1 className="text-2xl font-bold text-white mb-1">Let's Meet Now</h1>
+      <p className="text-[#8E8E93] text-sm mb-8">Meet people nearby</p>
+      <div className="w-full max-w-sm bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-5">
+        <h2 className="text-white font-bold text-lg mb-1">Confirm Your Age</h2>
+        <p className="text-[#8E8E93] text-xs mb-4">You must be 18 or older.</p>
+        <input type="date" value={dob} onChange={e => setDob(e.target.value)}
+          className="w-full h-10 bg-[#0A0A0A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
+        {err && <p className="text-red-400 text-xs mt-2">{err}</p>}
+        <button onClick={() => {
+          if (!dob) { setErr('Please enter your date of birth'); return }
+          const age = getAge(dob)
+          if (age < 18) { setErr('You must be 18 or older'); return }
+          onConfirm(dob)
+        }} className="w-full h-11 mt-4 gradient-btn rounded-xl text-white font-semibold text-sm nav-press">
+          Enter
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function GenderSetup({ onComplete, lang }: { onComplete: (gender: string, seeking: string) => void; lang: Lang }) {
+  const [gender, setGender] = useState('')
+  const [seeking, setSeeking] = useState('')
+  const [err, setErr] = useState('')
+  return (
+    <div className="fixed inset-0 z-[60] bg-[#0A0A0A] flex flex-col items-center justify-center px-6">
+      <div className="w-full max-w-sm bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-5">
+        <h2 className="text-white font-bold text-lg mb-4">Set Up Profile</h2>
+        <p className="text-[#8E8E93] text-xs mb-3">I am:</p>
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          {GENDERS.map(g => (
+            <button key={g} onClick={() => setGender(g)}
+              className={`h-12 rounded-xl font-semibold text-sm nav-press ${
+                gender === g ? 'bg-[#FF6B35]/10 text-[#FF6B35] border-2 border-[#FF6B35]' : 'bg-[#0A0A0A] text-white border border-[#2C2C2E]'
+              }`}>
+              {g === 'Male' ? t(lang, 'genderMale', 'lmn') : t(lang, 'genderFemale', 'lmn')}
+            </button>
+          ))}
+        </div>
+        <p className="text-[#8E8E93] text-xs mb-3">Looking for:</p>
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          {SEEKING_GENDERS.map(g => (
+            <button key={g} onClick={() => setSeeking(g)}
+              className={`h-12 rounded-xl font-semibold text-sm nav-press ${
+                seeking === g ? 'bg-[#5AC8FA]/10 text-[#5AC8FA] border-2 border-[#5AC8FA]' : 'bg-[#0A0A0A] text-white border border-[#2C2C2E]'
+              }`}>
+              {g === 'Men' ? t(lang, 'seekingMen', 'lmn') : t(lang, 'seekingWomen', 'lmn')}
+            </button>
+          ))}
+        </div>
+        {err && <p className="text-red-400 text-xs mb-3">{err}</p>}
+        <button onClick={() => {
+          if (!gender || !seeking) { setErr('Please select both'); return }
+          onComplete(gender, seeking)
+        }} className="w-full h-11 gradient-btn rounded-xl text-white font-semibold text-sm nav-press">
+          Continue
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ProfileTile({ user, onClick }: { user: UserProfile; onClick: () => void }) {
+  const zodiac = user.dob ? getZodiac(user.dob) : ''
+  const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
+  const hiddenAge = user.hideAgeUntil && new Date(user.hideAgeUntil).getTime() > Date.now()
+  const age = user.dob ? (hiddenAge ? 'N/A' : String(getAge(user.dob))) : '?'
+  return (
+    <button onClick={onClick} className="card-enter relative aspect-[3/4] rounded-lg overflow-hidden nav-press text-left">
+      {user.tgPhotoUrl ? (
+        <img src={user.tgPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center">
+          <span className="text-2xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+        </div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
+      {user.isInvisible && (
+        <div className="absolute top-1 left-1 z-30 w-4 h-4 rounded-full bg-purple-500/40 border border-purple-400/30 flex items-center justify-center text-[8px]">
+          👁️‍🗨️
+        </div>
+      )}
+      {user.openToMessages && (
+        <div className="absolute top-1 left-6 z-30 w-4 h-4 rounded-full bg-black/50 flex items-center justify-center text-[8px]">⭐</div>
+      )}
+      {user.isOnline && <div className="absolute top-1 right-1 z-30 w-2 h-2 bg-[#00D4AA] rounded-full" />}
+      {user.isOwn && <div className="absolute inset-0 border-2 border-[#FF6B35] rounded-lg pointer-events-none z-30" />}
+      <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-1.5 z-30 pointer-events-none">
+        <p className={`font-semibold text-[10px] truncate ${user.isOwn ? 'text-[#FF6B35]' : 'text-white'}`}>
+          {user.isOwn ? 'You' : user.name}
+        </p>
+        <div className="flex items-center justify-between">
+          <span className="text-[#FF6B35] text-[9px]">{formatDist(user.distance)}</span>
+          <span className="text-[#8E8E93] text-[8px]">{age} {emoji}</span>
+        </div>
+        <p className="text-[8px] text-[#8E8E93]">{user.seekingToday || ''} {user.meetupType ? `| ${user.meetupType}` : ''}</p>
+      </div>
+    </button>
+  )
+}
+
+function PhotoOverlay({ user, onClose, lang }: { user: UserProfile; onClose: () => void; lang: Lang }) {
+  const zodiac = user.dob ? getZodiac(user.dob) : ''
+  const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
+  const hiddenAge = user.hideAgeUntil && new Date(user.hideAgeUntil).getTime() > Date.now()
+  const age = user.dob ? (hiddenAge ? 'Hidden' : getAge(user.dob)) : '?'
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col animate-in fade-in duration-200">
+      <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-[#1A1A1A]/80 flex items-center justify-center z-20 nav-press">
+        <X className="w-5 h-5 text-white" />
+      </button>
+      <div className="flex-1 flex items-center justify-center p-4">
+        {user.tgPhotoUrl ? (
+          <img src={user.tgPhotoUrl} alt="" className="max-w-full max-h-[70vh] object-contain rounded-2xl" draggable={false} referrerPolicy="no-referrer" />
+        ) : (
+          <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
+            <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+          </div>
+        )}
+      </div>
+      <div className="px-4 pb-4 pt-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-white font-bold text-lg">{user.name}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <MapPin className="w-3.5 h-3.5 text-[#FF6B35]" />
+              <span className="text-[#8E8E93] text-xs">{formatDist(user.distance)}</span>
+              {isRecentlyActive(user.updatedAt) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">ONLINE</span>}
+            </div>
+          </div>
+          {!user.isOwn && (
+            <button className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
+              <MessageCircle className="w-4 h-4" />
+              {user.openToMessages ? '⭐ Message' : 'Message'}
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3 text-xs">
+          <span className="text-[#8E8E93]">H: {user.height}cm</span>
+          <span className="text-[#8E8E93]">W: {user.weight}kg</span>
+          <span className="text-[#FF6B35] font-bold">{age} {emoji}</span>
+          <span className="text-[#8E8E93]">{user.seekingToday || ''}</span>
+          <span className="text-[#8E8E93]">{user.meetupType || ''}</span>
+          {user.openToMessages && <span className="font-bold text-yellow-400">⭐ Open</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RaffleButton({ raffle, isAdmin, onBuy, onSetPrize, lang }: {
+  raffle: Raffle | null; isAdmin: boolean; onBuy: () => void;
+  onSetPrize: (p: 'filters' | 'invisible') => void; lang: Lang
+}) {
+  if (!raffle) return null
+  if (raffle.status === 'waiting') {
+    if (isAdmin) return <button className="text-[10px] px-2 py-1 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93] nav-press" onClick={() => onSetPrize('invisible')}>Set Prize</button>
+    return <span className="text-[#8E8E93] text-[9px]">Waiting...</span>
+  }
+  if (raffle.status === 'active') {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-[#FF6B35] text-[10px] font-bold">{raffle.tickets_sold}/{raffle.target_tickets}</span>
+        <button className="text-[10px] px-2 py-1 rounded-full gradient-btn text-white nav-press" onClick={onBuy}>50 ⭐</button>
+      </div>
+    )
+  }
+  return <span className="text-[#00D4AA] text-[9px]">Winner: {raffle.winner_name || '?'}</span>
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────
+
+function MainScreen({
+  ownProfile, users, onViewOwn, onViewPhoto, isLoading, lang, setLang,
+  onRefresh, isAdmin, filtersUnlocked, onUnlockFilters, onToggleInvisible,
+  gridRows, isInvisible, invisiblePurchased, raffle, onBuyTicket, onSetPrize,
+}: {
+  ownProfile: UserProfile; users: UserProfile[]; onViewOwn: () => void;
+  onViewPhoto: (u: UserProfile) => void; isLoading: boolean; lang: Lang; setLang: (l: Lang) => void;
+  onRefresh: () => void; isAdmin: boolean; filtersUnlocked: boolean;
+  onUnlockFilters: () => void; onToggleInvisible: () => void;
+  gridRows: number; isInvisible: boolean; invisiblePurchased: boolean;
+  raffle: Raffle | null; onBuyTicket: () => void; onSetPrize: (p: 'filters' | 'invisible') => void;
+}) {
+  const [onlineOnly, setOnlineOnly] = useState(false)
+  const [photoOnly, setPhotoOnly] = useState(false)
+  const [sexFilter, setSexFilter] = useState<string | null>(null) // null = locked, 'All' = unlocked all
+  const [ageFilter, setAgeFilter] = useState('any')
+  const [zodiacFilter, setZodiacFilter] = useState<string | null>(null)
+  const [activityFilter, setActivityFilter] = useState<string | null>(null)
+
+  const LANGS: Lang[] = ['en', 'tc', 'sc']
+  const cycleLang = () => {
+    const idx = LANGS.indexOf(lang)
+    const next = LANGS[(idx + 1) % LANGS.length]
+    setLang(next)
+    storage.set('lang', next)
+  }
+
+  const cycleSex = () => {
+    if (!filtersUnlocked && !isAdmin) return
+    const opts = ['All', 'Men', 'Women']
+    const current = sexFilter || 'All'
+    setSexFilter(opts[(opts.indexOf(current) + 1) % opts.length])
+  }
+
+  const cycleAge = () => {
+    if (!filtersUnlocked && !isAdmin) return
+    const idx = AGE_FILTERS.indexOf(ageFilter)
+    setAgeFilter(AGE_FILTERS[(idx + 1) % AGE_FILTERS.length])
+  }
+
+  const cycleZodiac = () => {
+    if (!filtersUnlocked && !isAdmin) return
+    const signs = ZODIAC_SIGNS.map(z => z.name)
+    if (!zodiacFilter) setZodiacFilter(signs[0])
+    else {
+      const idx = signs.indexOf(zodiacFilter)
+      setZodiacFilter(idx < signs.length - 1 ? signs[idx + 1] : null)
+    }
+  }
+
+  const cycleActivity = () => {
+    if (!filtersUnlocked && !isAdmin) return
+    const opts = [null, ...SEEKING_TODAY_OPTS]
+    const idx = opts.indexOf(activityFilter)
+    setActivityFilter(opts[(idx + 1) % opts.length])
+  }
+
+  const filtered = [...users, ownProfile].filter(u => {
+    if (u.isOwn) return true
+    if (onlineOnly && !isRecentlyActive(u.updatedAt)) return false
+    if (!isAdmin && u.isInvisible) return false
+    if (photoOnly && !u.tgPhotoUrl) return false
+
+    // Gender matching - auto-filter to seeking preference
+    if (!isAdmin) {
+      if (ownProfile.seekingGender === 'Men' && u.gender !== 'Male') return false
+      if (ownProfile.seekingGender === 'Women' && u.gender !== 'Female') return false
+      if (u.seekingGender === 'Men' && ownProfile.gender !== 'Male') return false
+      if (u.seekingGender === 'Women' && ownProfile.gender !== 'Female') return false
+    }
+    // Manual sex filter (unlocked)
+    if ((isAdmin || filtersUnlocked) && sexFilter && sexFilter !== 'All') {
+      if (sexFilter === 'Men' && u.gender !== 'Male') return false
+      if (sexFilter === 'Women' && u.gender !== 'Female') return false
+    }
+
+    // Age filter
+    if ((isAdmin || filtersUnlocked) && ageFilter !== 'any' && u.dob) {
+      const age = getAge(u.dob)
+      const myAge = ownProfile.dob ? getAge(ownProfile.dob) : 30
+      if (ageFilter === 'older' && age <= myAge) return false
+      if (ageFilter === 'younger' && age >= myAge) return false
+      if (ageFilter === 'same' && Math.abs(age - myAge) > 3) return false
+    }
+
+    // Zodiac filter
+    if ((isAdmin || filtersUnlocked) && zodiacFilter && u.dob) {
+      if (getZodiac(u.dob) !== zodiacFilter) return false
+    }
+
+    // Activity filter
+    if ((isAdmin || filtersUnlocked) && activityFilter && u.seekingToday !== activityFilter) return false
+
+    return true
+  }).sort((a, b) => {
+    if (a.isOwn) return -1
+    if (b.isOwn) return 1
+    return (a.distance || Infinity) - (b.distance || Infinity)
+  })
+
+  const maxVisible = gridRows * 5 + 1
+  const visibleUsers = filtered.slice(0, maxVisible)
+  const hasMore = filtered.length > maxVisible
+
+  return (
+    <div className="pb-20">
+      {/* Header */}
+      <div className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <img src={lmnLogo} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
+          <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
+          <div className="w-px h-5 bg-[#2C2C2E] mx-0.5" />
+          <RaffleButton raffle={raffle} isAdmin={isAdmin} onBuy={onBuyTicket} onSetPrize={onSetPrize} lang={lang} />
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={onToggleInvisible}
+            className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
+              isInvisible ? 'bg-purple-500/30 text-purple-400 border-purple-500/40' :
+              invisiblePurchased ? 'bg-purple-500/10 text-purple-500/60 border-purple-500/20' :
+              'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
+            }`} title="Invisible Mode">👁️‍🗨️</button>
+          <button onClick={onRefresh} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press">
+            <RefreshCw className="w-3.5 h-3.5 text-[#8E8E93]" />
+          </button>
+          <button onClick={cycleLang} className="text-[10px] font-bold text-[#FF6B35] px-2 py-1 rounded-full bg-[#FF6B35]/10 border border-[#FF6B35]/30 nav-press">
+            {getLangLabel(lang)}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="px-3 pt-1 flex items-center gap-3 text-[10px] text-[#8E8E93]">
+        <span>Nearby: {users.length}</span>
+        <span className="text-[#00D4AA]">Active: {users.filter(u => isRecentlyActive(u.updatedAt)).length + 1}</span>
+      </div>
+
+      {/* Filters */}
+      <div className="px-3 py-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+          <button onClick={() => setOnlineOnly(!onlineOnly)}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${onlineOnly ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${onlineOnly ? 'bg-[#00D4AA]' : 'bg-[#8E8E93]'}`} />
+            {onlineOnly ? 'Online' : 'All'}
+          </button>
+          <button onClick={() => setPhotoOnly(!photoOnly)}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoOnly ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+            {photoOnly ? 'Photo' : 'Any'}
+          </button>
+          <div className="w-px h-4 bg-[#2C2C2E] flex-shrink-0" />
+
+          {/* Sex filter */}
+          {isAdmin || filtersUnlocked ? (
+            <button onClick={cycleSex}
+              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${
+                sexFilter === 'Men' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                sexFilter === 'Women' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' :
+                'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
+              }`}>
+              {sexFilter || 'All'}
+            </button>
+          ) : (
+            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+          )}
+
+          {/* Age filter */}
+          {isAdmin || filtersUnlocked ? (
+            <button onClick={cycleAge}
+              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
+              {ageFilter}
+            </button>
+          ) : (
+            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+          )}
+
+          {/* Zodiac filter */}
+          {isAdmin || filtersUnlocked ? (
+            <button onClick={cycleZodiac}
+              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
+              {zodiacFilter ? getZodiacEmoji(zodiacFilter) : 'Zodiac'}
+            </button>
+          ) : (
+            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+          )}
+
+          {/* Activity filter */}
+          {isAdmin || filtersUnlocked ? (
+            <button onClick={cycleActivity}
+              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
+              {activityFilter || 'Activity'}
+            </button>
+          ) : (
+            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+          )}
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div className="px-3 pt-1">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-5 gap-1">
+            {visibleUsers.map(u => (
+              <ProfileTile key={u.id} user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {hasMore && (
+        <div className="px-3 py-3">
+          <button onClick={onUnlockFilters}
+            className="w-full h-10 rounded-xl border border-dashed border-[#FF6B35] bg-[#FF6B35]/5 text-[#FF6B35] text-xs font-semibold nav-press flex items-center justify-center gap-2">
+            <Lock className="w-3.5 h-3.5" />
+            Unlock more rows — 100 ⭐
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Own Profile Screen ──────────────────────────────────────────────
+
+function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible, onToggleInvisible }: {
+  profile: UserProfile; onSave: (p: any) => void; onBack: () => void;
+  lang: Lang; isAdmin: boolean; isInvisible: boolean; onToggleInvisible: () => void;
+}) {
+  const [height, setHeight] = useState(String(profile.height || ''))
+  const [weight, setWeight] = useState(String(profile.weight || ''))
+  const [seekingToday, setSeekingToday] = useState(profile.seekingToday || 'Just Browsing')
+  const [meetupType, setMeetupType] = useState(profile.meetupType || '')
+  const [hideAge, setHideAge] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
+
+  const zodiac = profile.dob ? getZodiac(profile.dob) : ''
+  const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
+  const age = profile.dob ? getAge(profile.dob) : '?'
+  const canEdit = !profile.height || new Date().getDate() === 1 || isAdmin
+
+  const changed = () => setHasChanges(true)
+
+  const handleSave = () => {
+    onSave({
+      height: parseInt(height) || profile.height,
+      weight: parseInt(weight) || profile.weight,
+      seeking_today: seekingToday,
+      meetup_type: meetupType,
+      hide_age_until: hideAge ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
+    })
+    setHasChanges(false)
+  }
+
+  return (
+    <div className="flex flex-col min-h-[100dvh] bg-[#0A0A0A]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2C2C2E]">
+        <button onClick={onBack} className="flex items-center gap-1 text-[#8E8E93] text-sm nav-press">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <span className="text-white font-semibold text-sm">Your Profile</span>
+        <div className="w-16" />
+      </div>
+
+      <div className="flex flex-col items-center px-4 py-5">
+        <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[#FF6B35] mb-3 bg-[#1A1A1A] flex items-center justify-center">
+          {profile.tgPhotoUrl ? (
+            <img src={profile.tgPhotoUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-3xl font-bold text-[#8E8E93]">{profile.name.charAt(0)}</span>
+          )}
+        </div>
+        <h2 className="text-white font-bold text-lg">{profile.name}</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-2xl">{emoji}</span>
+          <span className="text-[#8E8E93] text-sm">{age} years old · {zodiac}</span>
+        </div>
+        <p className="text-[#8E8E93] text-xs mt-1">{profile.gender} seeking {profile.seekingGender}</p>
+      </div>
+
+      <div className="flex-1 px-4 pb-24 space-y-4">
+        {/* Invisible toggle */}
+        <button onClick={onToggleInvisible}
+          className={`w-full h-11 rounded-xl font-semibold text-sm nav-press flex items-center justify-center gap-2 ${
+            isInvisible ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
+          }`}>
+          {isInvisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          {isInvisible ? 'Invisible ON' : 'Invisible OFF'}
+        </button>
+
+        {/* Hide age */}
+        <button onClick={() => { setHideAge(!hideAge); changed() }}
+          className={`w-full h-11 rounded-xl font-semibold text-sm nav-press flex items-center justify-center gap-2 ${
+            hideAge ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'gradient-btn text-white'
+          }`}>
+          {hideAge ? '🔓 Age Hidden' : '🔒 Age Visible'}
+        </button>
+
+        {/* Height / Weight */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[#8E8E93] text-xs block mb-1">Height {!canEdit && '(locked)'}</label>
+            <input type="number" value={height} onChange={e => { setHeight(e.target.value); changed() }}
+              disabled={!canEdit} placeholder="cm"
+              className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="text-[#8E8E93] text-xs block mb-1">Weight {!canEdit && '(locked)'}</label>
+            <input type="number" value={weight} onChange={e => { setWeight(e.target.value); changed() }}
+              disabled={!canEdit} placeholder="kg"
+              className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm disabled:opacity-50" />
+          </div>
+        </div>
+
+        {/* Seeking Today */}
+        <div>
+          <label className="text-[#8E8E93] text-xs block mb-2">What I'm looking for today</label>
+          <div className="grid grid-cols-2 gap-2">
+            {SEEKING_TODAY_OPTS.map(o => (
+              <button key={o} onClick={() => { setSeekingToday(o); changed() }}
+                className={`h-10 rounded-lg text-xs font-medium nav-press ${
+                  seekingToday === o ? 'bg-[#FF6B35]/10 text-[#FF6B35] border-2 border-[#FF6B35]' : 'bg-[#1A1A1A] text-white border border-[#2C2C2E]'
+                }`}>
+                {t(lang, 'seek' + o.replace(/\s/g, ''), 'lmn') || o}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Meetup Type */}
+        {seekingToday === 'Meetup' && (
+          <div>
+            <label className="text-[#8E8E93] text-xs block mb-2">Meetup type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {MEETUP_TYPES.map(m => (
+                <button key={m} onClick={() => { setMeetupType(m); changed() }}
+                  className={`h-10 rounded-lg text-[10px] font-medium nav-press ${
+                    meetupType === m ? 'bg-[#5AC8FA]/10 text-[#5AC8FA] border-2 border-[#5AC8FA]' : 'bg-[#1A1A1A] text-white border border-[#2C2C2E]'
+                  }`}>
+                  {t(lang, 'meet' + m.replace(/\s/g, '').replace('&', ''), 'lmn') || m}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <button onClick={handleSave} disabled={!hasChanges}
+          className={`w-full h-12 rounded-xl font-semibold text-sm nav-press ${
+            hasChanges ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
+          }`}>
+          Save
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// APP
+// ══════════════════════════════════════════════════════════════════════
+
+export default function App() {
+  const [view, setView] = useState<View>('MAIN')
+  const [lang, setLang] = useState<Lang>('en')
+  const [ownProfile, setOwnProfile] = useState<UserProfile>({
+    id: 0, name: '', tgPhotoUrl: '', height: 0, weight: 0, lat: 0, lng: 0,
+    gender: '', seekingGender: '', dob: null, seekingToday: null, meetupType: null,
+    isOnline: false, isOwn: false, updatedAt: '', isInvisible: false, openToMessages: true, hideAgeUntil: null,
+  })
+  const [users, setUsers] = useState<UserProfile[]>([])
+  const [locGranted, setLocGranted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [selectedPhoto, setSelectedPhoto] = useState<UserProfile | null>(null)
+  const [showAgeGate, setShowAgeGate] = useState(false)
+  const [showGenderSetup, setShowGenderSetup] = useState(false)
+  const [tempDob, setTempDob] = useState('')
+
+  // Premium
+  const [filtersUnlocked, setFiltersUnlocked] = useState(false)
+  const [gridRows, setGridRows] = useState(2)
+  const [isInvisible, setIsInvisible] = useState(false)
+  const [invisiblePurchased, setInvisiblePurchased] = useState(false)
+  const [raffle, setRaffle] = useState<Raffle | null>(null)
+
+  const tgUserRef = useRef<any>(null)
+
+  // ─── Init ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const tg = getTg()
+    if (tg) {
+      tg.ready(); tg.expand()
+      const user = tg.initDataUnsafe?.user
+      if (user) {
+        tgUserRef.current = user
+        setIsAdmin(isAdminUser(user))
+        setOwnProfile(p => ({
+          ...p, id: user.id, name: user.first_name, tgPhotoUrl: user.photo_url || '',
+        }))
+
+        // Check if profile exists in DB
+        fetchUserUnlockStatus(user.id).then(status => {
+          if (status) {
+            setGridRows(status.grid_rows_unlocked || 2)
+            setFiltersUnlocked(!!status.filters_unlocked)
+            if (status.invisible_until) {
+              const active = new Date(status.invisible_until).getTime() > Date.now()
+              setIsInvisible(active)
+              setInvisiblePurchased(true)
+            }
+          }
+        })
+      }
+    }
+
+    // Check onboarding
+    Promise.all([storage.get('dob'), storage.get('gender'), storage.get('seekingGender')]).then(([savedDob, savedGender, savedSeekingGender]) => {
+      if (!savedDob) setShowAgeGate(true)
+      else {
+        setOwnProfile(p => ({ ...p, dob: savedDob }))
+        if (!savedGender) setShowGenderSetup(true)
+        else {
+          setOwnProfile(p => ({
+            ...p, gender: savedGender,
+            seekingGender: savedSeekingGender || '',
+          }))
+        }
+      }
+    })
+
+    storage.get('lang').then(l => { if (l) setLang(l as Lang) })
+    getActiveRaffle().then(r => setRaffle(r))
+
+    // Get location
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => {
+        setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
+        setLocGranted(true)
+      },
+      () => setLocGranted(false),
+      { enableHighAccuracy: true, timeout: 15000 }
+    )
+  }, [])
+
+  // ─── Heartbeat ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!locGranted) return
+    const uid = tgUserRef.current?.id
+    if (!uid) return
+    const ping = () => setOnlineStatus(uid, true).catch(console.error)
+    ping()
+    const iv = setInterval(ping, 30000)
+    return () => clearInterval(iv)
+  }, [locGranted])
+
+  // ─── Refresh ───────────────────────────────────────────────────────
+  const handleRefresh = useCallback(() => {
+    if (!ownProfile.lat || !ownProfile.lng) return
+    setIsLoading(true)
+    fetchNearby(ownProfile.lat, ownProfile.lng).then(dbUsers => {
+      const myId = ownProfile.id
+      const mapped = dbUsers.filter(u => u.id !== myId).map(u => {
+        const p = dbToProfile(u, myId)
+        p.distance = haversineKm(ownProfile.lat, ownProfile.lng, u.lat || 0, u.lng || 0)
+        return p
+      })
+      setUsers(mapped)
+      setIsLoading(false)
+    }).catch(err => {
+      console.error('Refresh error:', err)
+      setIsLoading(false)
+    })
+  }, [ownProfile.lat, ownProfile.lng, ownProfile.id])
+
+  useEffect(() => {
+    if (!locGranted || !ownProfile.lat || !ownProfile.lng) return
+    handleRefresh()
+    const iv = setInterval(handleRefresh, 300000)
+    return () => clearInterval(iv)
+  }, [locGranted, ownProfile.lat, ownProfile.lng, handleRefresh])
+
+  // ─── Save profile ──────────────────────────────────────────────────
+  const handleSaveProfile = useCallback((updates: any) => {
+    const uid = tgUserRef.current?.id
+    if (!uid) return
+    const data = {
+      id: uid,
+      name: ownProfile.name,
+      photo_url: ownProfile.tgPhotoUrl || null,
+      height: updates.height ?? ownProfile.height,
+      weight: updates.weight ?? ownProfile.weight,
+      gender: ownProfile.gender,
+      seeking_gender: ownProfile.seekingGender,
+      dob: ownProfile.dob,
+      seeking_today: updates.seeking_today ?? ownProfile.seekingToday,
+      meetup_type: updates.meetup_type ?? ownProfile.meetupType,
+      lat: ownProfile.lat,
+      lng: ownProfile.lng,
+      is_online: true,
+      updated_at: new Date().toISOString(),
+      hide_age_until: updates.hide_age_until ?? ownProfile.hideAgeUntil,
+    }
+    upsertUser(data).then(() => {
+      setOwnProfile(p => ({ ...p, ...updates }))
+    }).catch(console.error)
+  }, [ownProfile])
+
+  // ─── Onboarding ────────────────────────────────────────────────────
+  const handleAgeConfirm = (dob: string) => {
+    storage.set('dob', dob)
+    setOwnProfile(p => ({ ...p, dob }))
+    setTempDob(dob)
+    setShowAgeGate(false)
+    setShowGenderSetup(true)
+  }
+
+  const handleGenderComplete = (gender: string, seeking: string) => {
+    storage.set('gender', gender)
+    storage.set('seekingGender', seeking)
+    setOwnProfile(p => ({ ...p, gender, seekingGender: seeking }))
+    setShowGenderSetup(false)
+    // Save to DB immediately
+    const uid = tgUserRef.current?.id
+    if (uid) {
+      upsertUser({
+        id: uid, name: ownProfile.name, photo_url: ownProfile.tgPhotoUrl || null,
+        gender, seeking_gender: seeking, dob: tempDob || ownProfile.dob,
+        lat: ownProfile.lat, lng: ownProfile.lng,
+        is_online: true, updated_at: new Date().toISOString(),
+      })
+    }
+  }
+
+  // ─── Invisible ─────────────────────────────────────────────────────
+  const handleToggleInvisible = useCallback(() => {
+    if (!invisiblePurchased && !isAdmin) {
+      alert('Purchase Invisible Mode (2000 ⭐)')
+      return
+    }
+    const uid = tgUserRef.current?.id
+    if (!uid) return
+    const newState = !isInvisible
+    const until = newState ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null
+    upsertUser({ id: uid, invisible_until: until }).then(() => {
+      setIsInvisible(newState)
+    })
+  }, [isInvisible, invisiblePurchased, isAdmin])
+
+  // ─── Unlock filters ────────────────────────────────────────────────
+  const handleUnlockFilters = useCallback(() => {
+    alert('Purchase Filter Unlock (300 ⭐)')
+  }, [])
+
+  // ─── Raffle ────────────────────────────────────────────────────────
+  const handleBuyTicket = useCallback(() => {
+    const uid = tgUserRef.current?.id
+    const name = tgUserRef.current?.first_name
+    if (!uid || !name) return
+    buyRaffleTicket(uid, name).then(ok => {
+      if (ok) getActiveRaffle().then(r => setRaffle(r))
+    })
+  }, [])
+
+  const handleSetPrize = useCallback((prize: 'filters' | 'invisible') => {
+    createRaffle(prize).then(r => setRaffle(r))
+  }, [])
+
+  if (showAgeGate) return <AgeGate onConfirm={handleAgeConfirm} lang={lang} />
+  if (showGenderSetup) return <GenderSetup onComplete={handleGenderComplete} lang={lang} />
+  if (!locGranted) {
+    return (
+      <div className="fixed inset-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center px-6">
+        <div className="w-16 h-16 rounded-full bg-[#FF6B35]/10 flex items-center justify-center mb-4">
+          <LocateFixed className="w-8 h-8 text-[#FF6B35]" />
+        </div>
+        <h2 className="text-xl font-bold text-white mb-2">Location Required</h2>
+        <p className="text-[#8E8E93] text-sm text-center mb-6">We need your location to show people nearby.</p>
+        <button onClick={() => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
+              setLocGranted(true)
+            },
+            () => alert('Permission denied. Please enable location.'),
+            { enableHighAccuracy: true, timeout: 10000 }
+          )
+        }} className="w-full max-w-sm h-12 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center justify-center gap-2">
+          <LocateFixed className="w-4 h-4" /> Grant Location
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-[100dvh] bg-[#0A0A0A]">
+      {view === 'MAIN' && (
+        <MainScreen
+          ownProfile={ownProfile} users={users}
+          onViewOwn={() => setView('OWN_PROFILE')}
+          onViewPhoto={setSelectedPhoto}
+          isLoading={isLoading} lang={lang} setLang={setLang}
+          onRefresh={handleRefresh} isAdmin={isAdmin}
+          filtersUnlocked={filtersUnlocked} onUnlockFilters={handleUnlockFilters}
+          onToggleInvisible={handleToggleInvisible}
+          gridRows={gridRows} isInvisible={isInvisible}
+          invisiblePurchased={invisiblePurchased}
+          raffle={raffle} onBuyTicket={handleBuyTicket} onSetPrize={handleSetPrize}
+        />
+      )}
+      {view === 'OWN_PROFILE' && (
+        <OwnProfileScreen
+          profile={ownProfile} onSave={handleSaveProfile} onBack={() => setView('MAIN')}
+          lang={lang} isAdmin={isAdmin} isInvisible={isInvisible}
+          onToggleInvisible={handleToggleInvisible}
+        />
+      )}
+      {selectedPhoto && (
+        <PhotoOverlay user={selectedPhoto} onClose={() => setSelectedPhoto(null)} lang={lang} />
+      )}
+    </div>
+  )
+}
