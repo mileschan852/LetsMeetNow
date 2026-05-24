@@ -107,6 +107,7 @@ export interface Raffle {
   winner_name: string | null
   created_at: string
   completed_at: string | null
+  ends_at: string | null
 }
 
 // ─── Distance ────────────────────────────────────────────────────────
@@ -257,7 +258,8 @@ export async function fetchTravelEntries(country: string, category: string): Pro
 export async function getActiveRaffle(): Promise<Raffle | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?status=eq.active&limit=1`, { headers })
+    // Get the most recent non-completed raffle (waiting or active)
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?status=in.(waiting,active)&order=created_at.desc&limit=1`, { headers })
     if (!res.ok) return null
     const data = await res.json()
     return data?.[0] || null
@@ -282,7 +284,7 @@ export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<
     const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'return=representation' },
-      body: JSON.stringify({ prize_type: prizeType, status: 'active', target_tickets: 20, tickets_sold: 0 }),
+      body: JSON.stringify({ prize_type: prizeType, status: 'waiting', target_tickets: 10, tickets_sold: 0 }),
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -290,7 +292,7 @@ export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<
   } catch { return null }
 }
 
-export async function drawRaffleWinner(raffleId: number): Promise<Raffle | null> {
+export async function drawRaffleWinner(raffleId: number): Promise<{ id: number; name: string } | null> {
   if (!hasValidKey) return null
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/draw_raffle_winner`, {
@@ -300,7 +302,30 @@ export async function drawRaffleWinner(raffleId: number): Promise<Raffle | null>
     })
     if (!res.ok) return null
     const data = await res.json()
-    return data?.[0] || null
+    if (!data || !data.id) return null
+    return { id: data.id, name: data.name || 'Unknown' }
   } catch { return null }
+}
+
+export async function setRaffleDrawToNextWednesday(raffleId: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const now = new Date()
+    const day = now.getDay() // 0=Sun, 1=Mon, ..., 3=Wed
+    const daysUntilWed = (3 - day + 7) % 7 || 7 // If today is Wed, go to next Wed
+    const nextWed = new Date(now)
+    nextWed.setDate(now.getDate() + daysUntilWed)
+    nextWed.setHours(20, 0, 0, 0)
+    const endsAt = nextWed.toISOString()
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${raffleId}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ ends_at: endsAt }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('setRaffleDrawToNextWednesday failed:', err)
+    return false
+  }
 }
 

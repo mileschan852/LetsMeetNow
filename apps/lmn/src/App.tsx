@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import {
   upsertUser, fetchNearby, setOnlineStatus, fetchUserUnlockStatus,
-  getActiveRaffle, buyRaffleTicket, createRaffle,
+  getActiveRaffle, buyRaffleTicket, createRaffle, drawRaffleWinner, setRaffleDrawToNextWednesday,
   getZodiac, getZodiacEmoji, getAge, type DbUser, type Raffle,
 } from '../lib/supabase'
 import { getTg, getUserId, makeStorage } from '../lib/storage'
@@ -348,16 +348,26 @@ function PhotoOverlay({ user, onClose, lang }: { user: UserProfile; onClose: () 
 
 // ─── Raffle Button ───────────────────────────────────────────────────
 
-function RaffleButton({ raffle, isAdmin, onBuy, onSetPrize, lang }: {
+function RaffleButton({ raffle, isAdmin, onBuy, onStartNext, lang }: {
   raffle: Raffle | null; isAdmin: boolean; onBuy: () => void;
-  onSetPrize: (p: 'filters' | 'invisible') => void; lang: Lang
+  onStartNext: () => void; lang: Lang
 }) {
-  if (!raffle) return null
-  if (raffle.status === 'waiting') {
-    if (isAdmin) return <button className="text-[10px] px-2 py-1 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93] nav-press" onClick={() => onSetPrize('invisible')}>Set Prize</button>
-    return <span className="text-[#8E8E93] text-[9px]">Waiting...</span>
+  if (!raffle || raffle.status === 'complete') {
+    return (
+      <button
+        onClick={() => { if (isAdmin) onStartNext() }}
+        className={`text-[10px] px-2 py-1 rounded-full nav-press ${
+          isAdmin
+            ? 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93] hover:bg-yellow-500/10 hover:text-yellow-400 hover:border-yellow-500/30'
+            : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93] opacity-50'
+        }`}
+        title={isAdmin ? 'Start Next Raffle' : 'No raffles'}
+      >
+        🎁
+      </button>
+    )
   }
-  if (raffle.status === 'active') {
+  if (raffle.status === 'waiting' || raffle.status === 'active') {
     return (
       <div className="flex items-center gap-1">
         <span className="text-[#FF6B35] text-[10px] font-bold">{raffle.tickets_sold}/{raffle.target_tickets}</span>
@@ -365,7 +375,7 @@ function RaffleButton({ raffle, isAdmin, onBuy, onSetPrize, lang }: {
       </div>
     )
   }
-  return <span className="text-[#00D4AA] text-[9px]">Winner: {raffle.winner_name || '?'}</span>
+  return null
 }
 
 // ─── Main Screen ─────────────────────────────────────────────────────
@@ -373,14 +383,14 @@ function RaffleButton({ raffle, isAdmin, onBuy, onSetPrize, lang }: {
 function MainScreen({
   ownProfile, users, onViewOwn, onViewPhoto, isLoading, lang, setLang,
   onRefresh, isAdmin, filtersUnlocked, onUnlockFilters, onToggleInvisible,
-  gridRows, isInvisible, invisiblePurchased, raffle, onBuyTicket, onSetPrize,
+  gridRows, isInvisible, invisiblePurchased, raffle, onBuyTicket, onStartNext,
 }: {
   ownProfile: UserProfile; users: UserProfile[]; onViewOwn: () => void;
   onViewPhoto: (u: UserProfile) => void; isLoading: boolean; lang: Lang; setLang: (l: Lang) => void;
   onRefresh: () => void; isAdmin: boolean; filtersUnlocked: boolean;
   onUnlockFilters: () => void; onToggleInvisible: () => void;
   gridRows: number; isInvisible: boolean; invisiblePurchased: boolean;
-  raffle: Raffle | null; onBuyTicket: () => void; onSetPrize: (p: 'filters' | 'invisible') => void;
+  raffle: Raffle | null; onBuyTicket: () => void; onStartNext: () => void;
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
   const [photoOnly, setPhotoOnly] = useState(false)
@@ -481,7 +491,7 @@ function MainScreen({
           <img src={lmnLogo} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
           <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
           <div className="w-px h-5 bg-[#2C2C2E] mx-0.5" />
-          <RaffleButton raffle={raffle} isAdmin={isAdmin} onBuy={onBuyTicket} onSetPrize={onSetPrize} lang={lang} />
+          <RaffleButton raffle={raffle} isAdmin={isAdmin} onBuy={onBuyTicket} onStartNext={onStartNext} lang={lang} />
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onToggleInvisible}
@@ -980,14 +990,50 @@ export default function App() {
     const uid = tgUserRef.current?.id
     const name = tgUserRef.current?.first_name
     if (!uid || !name) return
-    buyRaffleTicket(uid, name).then(ok => {
-      if (ok) getActiveRaffle().then(r => setRaffle(r))
+    buyRaffleTicket(uid, name).then(async ok => {
+      if (ok) {
+        const updated = await getActiveRaffle()
+        if (updated) {
+          setRaffle(updated)
+          // Auto-start countdown when >10 tickets sold, draw on next Wednesday
+          if (updated.tickets_sold > 10 && updated.status === 'waiting') {
+            await setRaffleDrawToNextWednesday(updated.id)
+            const final = await getActiveRaffle()
+            if (final) setRaffle(final)
+          }
+        }
+      }
     })
   }, [])
 
-  const handleSetPrize = useCallback((prize: 'filters' | 'invisible') => {
-    createRaffle(prize).then(r => setRaffle(r))
-  }, [])
+  const handleStartNextRaffle = useCallback(async () => {
+    if (!isAdmin) return
+    // Auto-alternate: if last raffle was invisible (or none), start filters next
+    const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
+    const newRaffle = await createRaffle(nextType)
+    if (newRaffle) setRaffle(newRaffle)
+  }, [isAdmin, raffle])
+
+  // Poll raffle to check if deadline reached — auto-draw winner
+  useEffect(() => {
+    if (!raffle || !raffle.ends_at) return
+    const checkDeadline = async () => {
+      if (new Date(raffle.ends_at!).getTime() <= Date.now()) {
+        const winner = await drawRaffleWinner(raffle.id)
+        if (winner) {
+          // If prize is invisible, update winner's invisible_until
+          if (raffle.prize_type === 'invisible') {
+            const until = new Date(Date.now() + 30 * 86400000).toISOString()
+            await upsertUser({ id: winner.id, invisible_until: until })
+          }
+        }
+        const final = await getActiveRaffle()
+        setRaffle(final || null)
+      }
+    }
+    const interval = setInterval(checkDeadline, 30000) // Check every 30s
+    return () => clearInterval(interval)
+  }, [raffle?.ends_at, raffle?.id, raffle?.prize_type])
 
   // ─── Splash done ────────────────────────────────────────────────────
   const handleSplashDone = () => {
@@ -1052,7 +1098,7 @@ export default function App() {
           onToggleInvisible={handleToggleInvisible}
           gridRows={gridRows} isInvisible={isInvisible}
           invisiblePurchased={invisiblePurchased}
-          raffle={raffle} onBuyTicket={handleBuyTicket} onSetPrize={handleSetPrize}
+          raffle={raffle} onBuyTicket={handleBuyTicket} onStartNext={handleStartNextRaffle}
         />
       )}
       {view === 'OWN_PROFILE' && (
