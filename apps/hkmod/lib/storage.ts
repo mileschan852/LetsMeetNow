@@ -15,6 +15,7 @@ interface TgWebApp {
   }
   openTelegramLink: (url: string) => void
   openLink: (url: string) => void
+  openInvoice: (url: string, callback?: (status: string) => void) => void
   close: () => void
   showPopup: (params: { title?: string; message: string }, cb?: () => void) => void
 }

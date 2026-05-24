@@ -17,6 +17,10 @@ interface TgWebApp {
   openLink: (url: string) => void
   close: () => void
   showPopup: (params: { title?: string; message: string }, cb?: () => void) => void
+  requestLocation?: (callback: (location: { latitude: number; longitude: number } | null) => void) => void
+  HapticFeedback?: {
+    impactOccurred: (style: 'light' | 'medium' | 'heavy') => void
+  }
 }
 
 export function getTg(): TgWebApp | undefined {

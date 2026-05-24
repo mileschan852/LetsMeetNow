@@ -100,13 +100,15 @@ export interface DbUser {
 export interface Raffle {
   id: number
   prize_type: 'filters' | 'invisible'
-  status: 'waiting' | 'active' | 'complete'
+  status: 'pending' | 'active' | 'completed'
   target_tickets: number
-  tickets_sold: number
+  current_tickets: number
   winner_id: number | null
   winner_name: string | null
+  winner_notified: boolean | null
+  countdown_started_at: string | null
   created_at: string
-  completed_at: string | null
+  updated_at: string
 }
 
 // ─── Distance ────────────────────────────────────────────────────────
@@ -282,7 +284,7 @@ export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<
     const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'return=representation' },
-      body: JSON.stringify({ prize_type: prizeType, status: 'active', target_tickets: 20, tickets_sold: 0 }),
+      body: JSON.stringify({ prize_type: prizeType, status: 'active', target_tickets: 20, current_tickets: 0 }),
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -296,7 +298,7 @@ export async function drawRaffleWinner(raffleId: number): Promise<Raffle | null>
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/draw_raffle_winner`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ p_raffle_id: raffleId }),
+      body: JSON.stringify({ raffle_id: raffleId }),
     })
     if (!res.ok) return null
     const data = await res.json()

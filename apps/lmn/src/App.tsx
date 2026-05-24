@@ -39,7 +39,7 @@ interface UserProfile {
   hideAgeUntil: string | null
 }
 
-type View = 'MAIN' | 'OWN_PROFILE' | 'AGE_GATE' | 'GENDER_SETUP'
+type View = 'MAIN' | 'OWN_PROFILE' | 'AGE_GATE' | 'GENDER_SETUP' | 'DISCLAIMER'
 
 const ADMIN_IDS = [5202742795, 725368127]
 function isAdminUser(user: any) { return !!user?.id && ADMIN_IDS.includes(user.id) }
@@ -101,7 +101,87 @@ function dbToProfile(u: DbUser, ownId: number): UserProfile {
   }
 }
 
-// ─── Components ────────────────────────────────────────────────────
+// ─── Splash Screen ───────────────────────────────────────────────────
+
+function SplashScreen({ onDone }: { onDone: () => void }) {
+  const [fade, setFade] = useState(false)
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setFade(true), 1200)
+    const t2 = setTimeout(() => onDone(), 1500)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [onDone])
+
+  return (
+    <div className={`fixed inset-0 z-[80] bg-[#0A0A0A] flex flex-col items-center justify-center transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}>
+      <img src={lmnLogo} alt="LMN" className="w-24 h-24 rounded-2xl mb-4 animate-pulse" />
+      <h1 className="text-3xl font-bold gradient-text tracking-tight mb-1">Let's Meet Now</h1>
+      <p className="text-[#8E8E93] text-sm">Meet people nearby</p>
+      <div className="absolute bottom-8">
+        <div className="w-6 h-6 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
+      </div>
+    </div>
+  )
+}
+
+// ─── Disclaimer Modal ────────────────────────────────────────────────
+
+function DisclaimerModal({ onAgree, lang }: { onAgree: () => void; lang: Lang }) {
+  const [checked, setChecked] = useState(false)
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center px-5">
+      <img src={lmnLogo} alt="LMN" className="w-16 h-16 rounded-2xl mb-4" />
+      <h1 className="text-xl font-bold gradient-text mb-1">Let's Meet Now</h1>
+      <p className="text-[#8E8E93] text-xs mb-6">{t(lang, 'splashTagline')}</p>
+
+      <div className="w-full max-w-sm bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+        <h2 className="text-white font-bold text-lg">{t(lang, 'disclaimerTitle')}</h2>
+
+        <div className="space-y-3 text-[#8E8E93] text-xs leading-relaxed">
+          <div className="flex items-start gap-2">
+            <span className="text-[#FF6B35] font-bold flex-shrink-0">18+</span>
+            <span>{t(lang, 'disclaimerAge')}</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-[#FF6B35] font-bold flex-shrink-0">📍</span>
+            <span>{t(lang, 'disclaimerLoc')}</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-[#FF6B35] font-bold flex-shrink-0">🤝</span>
+            <span>{t(lang, 'disclaimerConduct')}</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-[#FF6B35] font-bold flex-shrink-0">🔒</span>
+            <span>{t(lang, 'disclaimerPrivacy')}</span>
+          </div>
+        </div>
+
+        <label className="flex items-start gap-2 cursor-pointer pt-2">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={e => setChecked(e.target.checked)}
+            className="mt-0.5 w-4 h-4 rounded border-[#2C2C2E] bg-[#0A0A0A] text-[#FF6B35] accent-[#FF6B35]"
+          />
+          <span className="text-[#8E8E93] text-xs">{t(lang, 'disclaimerAgree')}</span>
+        </label>
+
+        <button
+          onClick={onAgree}
+          disabled={!checked}
+          className={`w-full h-11 rounded-xl text-white font-semibold text-sm nav-press ${
+            checked ? 'gradient-btn' : 'bg-[#2C2C2E] text-[#8E8E93] cursor-not-allowed'
+          }`}
+        >
+          {t(lang, 'disclaimerContinue')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Age Gate ─────────────────────────────────────────────────────────
 
 function AgeGate({ onConfirm, lang }: { onConfirm: (dob: string) => void; lang: Lang }) {
   const [dob, setDob] = useState('')
@@ -129,6 +209,8 @@ function AgeGate({ onConfirm, lang }: { onConfirm: (dob: string) => void; lang: 
     </div>
   )
 }
+
+// ─── Gender Setup ─────────────────────────────────────────────────────
 
 function GenderSetup({ onComplete, lang }: { onComplete: (gender: string, seeking: string) => void; lang: Lang }) {
   const [gender, setGender] = useState('')
@@ -172,6 +254,8 @@ function GenderSetup({ onComplete, lang }: { onComplete: (gender: string, seekin
   )
 }
 
+// ─── Profile Grid Tile ───────────────────────────────────────────────
+
 function ProfileTile({ user, onClick }: { user: UserProfile; onClick: () => void }) {
   const zodiac = user.dob ? getZodiac(user.dob) : ''
   const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
@@ -210,6 +294,8 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick: () => void
     </button>
   )
 }
+
+// ─── Photo Overlay ────────────────────────────────────────────────────
 
 function PhotoOverlay({ user, onClose, lang }: { user: UserProfile; onClose: () => void; lang: Lang }) {
   const zodiac = user.dob ? getZodiac(user.dob) : ''
@@ -259,6 +345,8 @@ function PhotoOverlay({ user, onClose, lang }: { user: UserProfile; onClose: () 
     </div>
   )
 }
+
+// ─── Raffle Button ───────────────────────────────────────────────────
 
 function RaffleButton({ raffle, isAdmin, onBuy, onSetPrize, lang }: {
   raffle: Raffle | null; isAdmin: boolean; onBuy: () => void;
@@ -339,7 +427,7 @@ function MainScreen({
     setActivityFilter(opts[(idx + 1) % opts.length])
   }
 
-  const filtered = [...users, ownProfile].filter(u => {
+  const filtered = [{ ...ownProfile, isOwn: true }, ...users.filter(u => u.id !== ownProfile.id)].filter(u => {
     if (u.isOwn) return true
     if (onlineOnly && !isRecentlyActive(u.updatedAt)) return false
     if (!isAdmin && u.isInvisible) return false
@@ -383,7 +471,6 @@ function MainScreen({
   })
 
   const maxVisible = gridRows * 5 + 1
-  const visibleUsers = filtered.slice(0, maxVisible)
   const hasMore = filtered.length > maxVisible
 
   return (
@@ -414,8 +501,8 @@ function MainScreen({
 
       {/* Stats */}
       <div className="px-3 pt-1 flex items-center gap-3 text-[10px] text-[#8E8E93]">
-        <span>Nearby: {users.length}</span>
-        <span className="text-[#00D4AA]">Active: {users.filter(u => isRecentlyActive(u.updatedAt)).length + 1}</span>
+        <span>{t(lang, 'nearby')}: {users.length}</span>
+        <span className="text-[#00D4AA]">{t(lang, 'active1h')}: {users.filter(u => isRecentlyActive(u.updatedAt)).length + 1}</span>
       </div>
 
       {/* Filters */}
@@ -424,11 +511,11 @@ function MainScreen({
           <button onClick={() => setOnlineOnly(!onlineOnly)}
             className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${onlineOnly ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
             <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${onlineOnly ? 'bg-[#00D4AA]' : 'bg-[#8E8E93]'}`} />
-            {onlineOnly ? 'Online' : 'All'}
+            {onlineOnly ? t(lang, 'online') : t(lang, 'filterAll')}
           </button>
           <button onClick={() => setPhotoOnly(!photoOnly)}
             className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoOnly ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-            {photoOnly ? 'Photo' : 'Any'}
+            {photoOnly ? t(lang, 'photo') : t(lang, 'any')}
           </button>
           <div className="w-px h-4 bg-[#2C2C2E] flex-shrink-0" />
 
@@ -440,7 +527,7 @@ function MainScreen({
                 sexFilter === 'Women' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' :
                 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
               }`}>
-              {sexFilter || 'All'}
+              {sexFilter || t(lang, 'filterAll')}
             </button>
           ) : (
             <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
@@ -450,7 +537,7 @@ function MainScreen({
           {isAdmin || filtersUnlocked ? (
             <button onClick={cycleAge}
               className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
-              {ageFilter}
+              {t(lang, 'age' + ageFilter.charAt(0).toUpperCase() + ageFilter.slice(1)) || ageFilter}
             </button>
           ) : (
             <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
@@ -460,7 +547,7 @@ function MainScreen({
           {isAdmin || filtersUnlocked ? (
             <button onClick={cycleZodiac}
               className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
-              {zodiacFilter ? getZodiacEmoji(zodiacFilter) : 'Zodiac'}
+              {zodiacFilter ? getZodiacEmoji(zodiacFilter) : t(lang, 'zodiac')}
             </button>
           ) : (
             <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
@@ -470,7 +557,7 @@ function MainScreen({
           {isAdmin || filtersUnlocked ? (
             <button onClick={cycleActivity}
               className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
-              {activityFilter || 'Activity'}
+              {activityFilter ? (t(lang, 'seek' + activityFilter.replace(/\s/g, ''), 'lmn') || activityFilter) : t(lang, 'activity')}
             </button>
           ) : (
             <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
@@ -486,8 +573,17 @@ function MainScreen({
           </div>
         ) : (
           <div className="grid grid-cols-5 gap-1">
-            {visibleUsers.map(u => (
-              <ProfileTile key={u.id} user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
+            {filtered.map((u, idx) => (
+              <div
+                key={u.id}
+                style={{
+                  opacity: idx >= maxVisible && !u.isOwn ? 0.25 : 1,
+                  pointerEvents: idx >= maxVisible && !u.isOwn ? 'none' : 'auto',
+                  filter: idx >= maxVisible && !u.isOwn ? 'grayscale(100%) brightness(0.5)' : 'none',
+                }}
+              >
+                <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
+              </div>
             ))}
           </div>
         )}
@@ -661,6 +757,10 @@ export default function App() {
   const [showGenderSetup, setShowGenderSetup] = useState(false)
   const [tempDob, setTempDob] = useState('')
 
+  // Splash + Disclaimer
+  const [showSplash, setShowSplash] = useState(true)
+  const [showDisclaimer, setShowDisclaimer] = useState(false)
+
   // Premium
   const [filtersUnlocked, setFiltersUnlocked] = useState(false)
   const [gridRows, setGridRows] = useState(2)
@@ -699,9 +799,17 @@ export default function App() {
     }
 
     // Check onboarding
-    Promise.all([storage.get('dob'), storage.get('gender'), storage.get('seekingGender')]).then(([savedDob, savedGender, savedSeekingGender]) => {
-      if (!savedDob) setShowAgeGate(true)
-      else {
+    Promise.all([
+      storage.get('dob'),
+      storage.get('gender'),
+      storage.get('seekingGender'),
+      storage.get('disclaimerAgreed'),
+    ]).then(([savedDob, savedGender, savedSeekingGender, disclaimerAgreed]) => {
+      if (!disclaimerAgreed) {
+        setShowDisclaimer(true)
+      } else if (!savedDob) {
+        setShowAgeGate(true)
+      } else {
         setOwnProfile(p => ({ ...p, dob: savedDob }))
         if (!savedGender) setShowGenderSetup(true)
         else {
@@ -716,15 +824,35 @@ export default function App() {
     storage.get('lang').then(l => { if (l) setLang(l as Lang) })
     getActiveRaffle().then(r => setRaffle(r))
 
-    // Get location
-    navigator.geolocation?.getCurrentPosition(
-      (pos) => {
-        setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
-        setLocGranted(true)
-      },
-      () => setLocGranted(false),
-      { enableHighAccuracy: true, timeout: 15000 }
-    )
+    // Get location — try Telegram native first, then browser fallback
+    if (tg?.requestLocation) {
+      tg.requestLocation((location) => {
+        if (location) {
+          setOwnProfile(p => ({ ...p, lat: location.latitude, lng: location.longitude }))
+          setLocGranted(true)
+        } else {
+          // Telegram denied — try browser as fallback
+          navigator.geolocation?.getCurrentPosition(
+            (pos) => {
+              setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
+              setLocGranted(true)
+            },
+            () => setLocGranted(false),
+            { enableHighAccuracy: true, timeout: 15000 }
+          )
+        }
+      })
+    } else {
+      // No Telegram native API — use browser
+      navigator.geolocation?.getCurrentPosition(
+        (pos) => {
+          setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
+          setLocGranted(true)
+        },
+        () => setLocGranted(false),
+        { enableHighAccuracy: true, timeout: 15000 }
+      )
+    }
   }, [])
 
   // ─── Heartbeat ─────────────────────────────────────────────────────
@@ -790,6 +918,17 @@ export default function App() {
     }).catch(console.error)
   }, [ownProfile])
 
+  // ─── Disclaimer ───────────────────────────────────────────────────
+  const handleDisclaimerAgree = () => {
+    storage.set('disclaimerAgreed', 'true')
+    setShowDisclaimer(false)
+    // Continue to next onboarding step
+    Promise.all([storage.get('dob'), storage.get('gender')]).then(([savedDob, savedGender]) => {
+      if (!savedDob) setShowAgeGate(true)
+      else if (!savedGender) setShowGenderSetup(true)
+    })
+  }
+
   // ─── Onboarding ────────────────────────────────────────────────────
   const handleAgeConfirm = (dob: string) => {
     storage.set('dob', dob)
@@ -850,6 +989,14 @@ export default function App() {
     createRaffle(prize).then(r => setRaffle(r))
   }, [])
 
+  // ─── Splash done ────────────────────────────────────────────────────
+  const handleSplashDone = () => {
+    setShowSplash(false)
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────
+  if (showSplash) return <SplashScreen onDone={handleSplashDone} />
+  if (showDisclaimer) return <DisclaimerModal onAgree={handleDisclaimerAgree} lang={lang} />
   if (showAgeGate) return <AgeGate onConfirm={handleAgeConfirm} lang={lang} />
   if (showGenderSetup) return <GenderSetup onComplete={handleGenderComplete} lang={lang} />
   if (!locGranted) {
@@ -861,14 +1008,30 @@ export default function App() {
         <h2 className="text-xl font-bold text-white mb-2">Location Required</h2>
         <p className="text-[#8E8E93] text-sm text-center mb-6">We need your location to show people nearby.</p>
         <button onClick={() => {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
-              setLocGranted(true)
-            },
-            () => alert('Permission denied. Please enable location.'),
-            { enableHighAccuracy: true, timeout: 10000 }
-          )
+          const tg2 = getTg()
+          const onGranted = (lat: number, lng: number) => {
+            setOwnProfile(p => ({ ...p, lat, lng }))
+            setLocGranted(true)
+          }
+          const onDenied = () => alert(t(lang, 'permissionDenied') || 'Permission denied. Please enable location.')
+          if (tg2?.requestLocation) {
+            tg2.requestLocation((location) => {
+              if (location) onGranted(location.latitude, location.longitude)
+              else {
+                navigator.geolocation?.getCurrentPosition(
+                  (pos) => onGranted(pos.coords.latitude, pos.coords.longitude),
+                  onDenied,
+                  { enableHighAccuracy: true, timeout: 10000 }
+                )
+              }
+            })
+          } else {
+            navigator.geolocation?.getCurrentPosition(
+              (pos) => onGranted(pos.coords.latitude, pos.coords.longitude),
+              onDenied,
+              { enableHighAccuracy: true, timeout: 10000 }
+            )
+          }
         }} className="w-full max-w-sm h-12 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center justify-center gap-2">
           <LocateFixed className="w-4 h-4" /> Grant Location
         </button>

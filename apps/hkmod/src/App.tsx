@@ -298,14 +298,14 @@ function RaffleButton({ raffle, isAdmin, onBuy, onSetPrize, lang }: {
   onSetPrize: (p: 'filters' | 'invisible') => void; lang: Lang
 }) {
   if (!raffle) return null
-  if (raffle.status === 'waiting') {
+  if (raffle.status === 'pending') {
     if (isAdmin) return <button className="text-[10px] px-2 py-1 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93] nav-press" onClick={() => onSetPrize('invisible')}>Set Prize</button>
     return <span className="text-[#8E8E93] text-[9px]">Waiting...</span>
   }
   if (raffle.status === 'active') {
     return (
       <div className="flex items-center gap-1">
-        <span className="text-[#FF6B35] text-[10px] font-bold">{raffle.tickets_sold}/{raffle.target_tickets}</span>
+        <span className="text-[#FF6B35] text-[10px] font-bold">{raffle.current_tickets}/{raffle.target_tickets}</span>
         <button className="text-[10px] px-2 py-1 rounded-full gradient-btn text-white nav-press" onClick={onBuy}>50 ⭐</button>
       </div>
     )
@@ -449,7 +449,9 @@ function MainScreen({
               {roleFilter}
             </button>
           ) : (
-            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
+              🔒 {roleFilter}
+            </button>
           )}
 
           {/* Safe/Raw */}
@@ -459,7 +461,9 @@ function MainScreen({
               {tPref(lang, pref1)}
             </button>
           ) : (
-            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
+              🔒 {tPref(lang, pref1)}
+            </button>
           )}
 
           {/* Clean/Party */}
