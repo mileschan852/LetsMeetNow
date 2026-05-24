@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import lmnLogo from './assets/lmn-logo.svg'
+import lmnLogoAnim from './assets/lmn-logo-animated.mp4'
 import { t, tZodiac, type Lang, getLangLabel } from '../lib/i18n'
 import {
   MapPin, X, MessageCircle, LocateFixed, RefreshCw,
@@ -107,14 +108,21 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
   const [fade, setFade] = useState(false)
 
   useEffect(() => {
-    const t1 = setTimeout(() => setFade(true), 1200)
-    const t2 = setTimeout(() => onDone(), 1500)
+    const t1 = setTimeout(() => setFade(true), 2500)
+    const t2 = setTimeout(() => onDone(), 2800)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [onDone])
 
   return (
-    <div className={`fixed inset-0 z-[80] bg-[#0A0A0A] flex flex-col items-center justify-center transition-opacity duration-300 ${fade ? 'opacity-0' : 'opacity-100'}`}>
-      <img src={lmnLogo} alt="LMN" className="w-24 h-24 rounded-2xl mb-4 animate-pulse" />
+    <div className={`fixed inset-0 z-[80] bg-[#0A0A0A] flex flex-col items-center justify-center transition-opacity duration-500 ${fade ? 'opacity-0' : 'opacity-100'}`}>
+      <video
+        src={lmnLogoAnim}
+        autoPlay
+        muted
+        playsInline
+        loop
+        className="w-28 h-28 rounded-2xl mb-4 object-cover"
+      />
       <h1 className="text-3xl font-bold gradient-text tracking-tight mb-1">Let's Meet Now</h1>
       <p className="text-[#8E8E93] text-sm">Meet people nearby</p>
       <div className="absolute bottom-8">
