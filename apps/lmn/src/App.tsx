@@ -262,34 +262,34 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick: () => void
   const hiddenAge = user.hideAgeUntil && new Date(user.hideAgeUntil).getTime() > Date.now()
   const age = user.dob ? (hiddenAge ? 'N/A' : String(getAge(user.dob))) : '?'
   return (
-    <button onClick={onClick} className="card-enter relative aspect-[3/4] rounded-lg overflow-hidden nav-press text-left">
+    <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
       {user.tgPhotoUrl ? (
         <img src={user.tgPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center">
-          <span className="text-2xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+          <span className="text-lg font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
         </div>
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
       {user.isInvisible && (
-        <div className="absolute top-1 left-1 z-30 w-4 h-4 rounded-full bg-purple-500/40 border border-purple-400/30 flex items-center justify-center text-[8px]">
+        <div className="absolute top-0.5 left-0.5 z-30 w-3 h-3 rounded-full bg-purple-500/40 border border-purple-400/30 flex items-center justify-center text-[7px]">
           👁️‍🗨️
         </div>
       )}
       {user.openToMessages && (
-        <div className="absolute top-1 left-6 z-30 w-4 h-4 rounded-full bg-black/50 flex items-center justify-center text-[8px]">⭐</div>
+        <div className="absolute top-0.5 left-4 z-30 w-3 h-3 rounded-full bg-black/50 flex items-center justify-center text-[7px]">⭐</div>
       )}
-      {user.isOnline && <div className="absolute top-1 right-1 z-30 w-2 h-2 bg-[#00D4AA] rounded-full" />}
+      {user.isOnline && <div className="absolute top-0.5 right-0.5 z-30 w-2 h-2 bg-[#00D4AA] rounded-full" />}
       {user.isOwn && <div className="absolute inset-0 border-2 border-[#FF6B35] rounded-lg pointer-events-none z-30" />}
-      <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-1.5 z-30 pointer-events-none">
-        <p className={`font-semibold text-[10px] truncate ${user.isOwn ? 'text-[#FF6B35]' : 'text-white'}`}>
+      <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] z-30 pointer-events-none">
+        <p className={`font-semibold text-[8px] truncate ${user.isOwn ? 'text-[#FF6B35]' : 'text-white'}`}>
           {user.isOwn ? 'You' : user.name}
         </p>
         <div className="flex items-center justify-between">
-          <span className="text-[#FF6B35] text-[9px]">{formatDist(user.distance)}</span>
-          <span className="text-[#8E8E93] text-[8px]">{age} {emoji}</span>
+          <span className="text-[#FF6B35] text-[7px]">{formatDist(user.distance)}</span>
+          <span className="text-[#8E8E93] text-[6px]">{age} {emoji}</span>
         </div>
-        <p className="text-[8px] text-[#8E8E93]">{user.seekingToday || ''} {user.meetupType ? `| ${user.meetupType}` : ''}</p>
+        <p className="text-[6px] text-[#8E8E93]">{user.seekingToday || ''} {user.meetupType ? `| ${user.meetupType}` : ''}</p>
       </div>
     </button>
   )

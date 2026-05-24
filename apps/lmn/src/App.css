@@ -55,6 +55,22 @@
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+
+  /* Tile aspect ratio — 5 rows visible on one screen */
+  .tile-aspect {
+    position: relative;
+    width: 100%;
+    min-height: 50px;
+  }
+  .tile-aspect::before {
+    content: '';
+    display: block;
+    padding-bottom: 80%;
+  }
+  .tile-aspect > * {
+    position: absolute;
+    inset: 0;
+  }
 }
 
 @keyframes cardIn {
