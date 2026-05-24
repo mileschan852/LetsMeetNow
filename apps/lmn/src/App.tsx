@@ -391,13 +391,13 @@ function RaffleButton({ raffle, isAdmin, onBuy, onStartNext, lang }: {
 function MainScreen({
   ownProfile, users, onViewOwn, onViewPhoto, isLoading, lang, setLang,
   onRefresh, isAdmin, filtersUnlocked, onUnlockFilters, onToggleInvisible,
-  gridRows, isInvisible, invisiblePurchased, raffle, onBuyTicket, onStartNext,
+  gridRows, channelFollowUnlock, onClaimChannelFollow, isInvisible, invisiblePurchased, raffle, onBuyTicket, onStartNext,
 }: {
   ownProfile: UserProfile; users: UserProfile[]; onViewOwn: () => void;
   onViewPhoto: (u: UserProfile) => void; isLoading: boolean; lang: Lang; setLang: (l: Lang) => void;
   onRefresh: () => void; isAdmin: boolean; filtersUnlocked: boolean;
   onUnlockFilters: () => void; onToggleInvisible: () => void;
-  gridRows: number; isInvisible: boolean; invisiblePurchased: boolean;
+  gridRows: number; channelFollowUnlock: number; onClaimChannelFollow: () => void; isInvisible: boolean; invisiblePurchased: boolean;
   raffle: Raffle | null; onBuyTicket: () => void; onStartNext: () => void;
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
@@ -488,7 +488,7 @@ function MainScreen({
     return (a.distance || Infinity) - (b.distance || Infinity)
   })
 
-  const maxVisible = gridRows * 5 + 1
+  const maxVisible = (gridRows + channelFollowUnlock) * 5 + 1
   const hasMore = filtered.length > maxVisible
 
   return (
@@ -518,9 +518,17 @@ function MainScreen({
       </div>
 
       {/* Stats */}
-      <div className="px-3 pt-1 flex items-center gap-3 text-[10px] text-[#8E8E93]">
+      <div className="px-3 pt-1 flex items-center gap-2 text-[10px] text-[#8E8E93]">
         <span>{t(lang, 'nearby')}: {users.length}</span>
         <span className="text-[#00D4AA]">{t(lang, 'active1h')}: {users.filter(u => isRecentlyActive(u.updatedAt)).length + 1}</span>
+        <span className="text-[#2C2C2E]">|</span>
+        <span className="text-[#FF6B35] font-bold">Rows: {gridRows + channelFollowUnlock}</span>
+        <button
+          onClick={() => { if (!channelFollowUnlock) onClaimChannelFollow() }}
+          className={`ml-auto text-[9px] nav-press ${channelFollowUnlock ? 'text-[#00D4AA]' : 'text-[#5AC8FA]'}`}
+        >
+          {channelFollowUnlock ? 'Channel: +1 ✅' : 'Follow @LetsMeetNowApp +1'}
+        </button>
       </div>
 
       {/* Filters */}
@@ -782,6 +790,7 @@ export default function App() {
   // Premium
   const [filtersUnlocked, setFiltersUnlocked] = useState(false)
   const [gridRows, setGridRows] = useState(2)
+  const [channelFollowUnlock, setChannelFollowUnlock] = useState(0)
   const [isInvisible, setIsInvisible] = useState(false)
   const [invisiblePurchased, setInvisiblePurchased] = useState(false)
   const [raffle, setRaffle] = useState<Raffle | null>(null)
@@ -815,6 +824,11 @@ export default function App() {
         })
       }
     }
+
+    // Load channel follow unlock
+    storage.get('channelFollowed').then(v => {
+      if (v === '1') setChannelFollowUnlock(1)
+    })
 
     // Check onboarding
     Promise.all([
@@ -988,6 +1002,20 @@ export default function App() {
     })
   }, [isInvisible, invisiblePurchased, isAdmin])
 
+  // ─── Channel Follow Unlock — +1 row for following @LetsMeetNowApp ──
+  const handleClaimChannelFollow = useCallback(async () => {
+    if (channelFollowUnlock) return
+    const url = 'https://t.me/LetsMeetNowApp'
+    try {
+      const tg = getTg()
+      if (tg?.openTelegramLink) { tg.openTelegramLink(url) }
+      else if (tg?.openLink) { tg.openLink(url) }
+      else { window.open(url, '_blank') }
+    } catch {}
+    setChannelFollowUnlock(1)
+    storage.set('channelFollowed', '1')
+  }, [channelFollowUnlock])
+
   // ─── Unlock filters ────────────────────────────────────────────────
   const handleUnlockFilters = useCallback(() => {
     alert('Purchase Filter Unlock (300 ⭐)')
@@ -1104,7 +1132,8 @@ export default function App() {
           onRefresh={handleRefresh} isAdmin={isAdmin}
           filtersUnlocked={filtersUnlocked} onUnlockFilters={handleUnlockFilters}
           onToggleInvisible={handleToggleInvisible}
-          gridRows={gridRows} isInvisible={isInvisible}
+          gridRows={gridRows} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={handleClaimChannelFollow}
+          isInvisible={isInvisible}
           invisiblePurchased={invisiblePurchased}
           raffle={raffle} onBuyTicket={handleBuyTicket} onStartNext={handleStartNextRaffle}
         />
