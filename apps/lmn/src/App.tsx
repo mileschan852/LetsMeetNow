@@ -1088,10 +1088,10 @@ export default function App() {
     const uid = tgUserRef.current?.id
     if (!uid) return
 
-    // Admin: free row unlock (+2)
+    // Admin: free row unlock (+1)
     if (isAdmin) {
       try {
-        const newRows = gridRows + 2
+        const newRows = gridRows + 1
         await upsertUser({ id: uid, grid_rows_unlocked: newRows })
         setGridRows(newRows)
       } catch (e) { console.error('Admin unlock failed:', e) }
@@ -1110,7 +1110,7 @@ export default function App() {
       if (data.ok && data.result && tg?.openInvoice) {
         tg.openInvoice(data.result, async (status: string) => {
           if (status === 'paid') {
-            const newRows = gridRows + 2
+            const newRows = gridRows + 1
             await upsertUser({ id: uid, grid_rows_unlocked: newRows })
             setGridRows(newRows)
           }
