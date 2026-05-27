@@ -10,7 +10,7 @@ import {
 import {
   upsertUser, fetchNearby, setOnlineStatus, fetchUserUnlockStatus,
   getActiveRaffle, buyRaffleTicket, createRaffle, drawRaffleWinner, setRaffleDrawToNextWednesday,
-  getZodiac, getZodiacEmoji, getAge, type DbUser, type Raffle,
+  getZodiac, getZodiacEmoji, getAge, ensureFilterUnlock, type DbUser, type Raffle,
 } from '../lib/supabase'
 import { getTg, getUserId, makeStorage } from '../lib/storage'
 
@@ -1021,8 +1021,14 @@ export default function App() {
       updated_at: new Date().toISOString(),
       hide_age_until: updates.hide_age_until ?? ownProfile.hideAgeUntil,
     }
-    upsertUser(data).then(() => {
+    upsertUser(data).then((result) => {
       setOwnProfile(p => ({ ...p, ...updates }))
+      // Auto 7-day filter unlock for new users
+      if (result && !result.filters_unlocked_expires_at) {
+        ensureFilterUnlock(result.id).then(ok => {
+          console.log('Auto filter unlock:', ok ? 'set 7 days' : 'failed')
+        })
+      }
     }).catch(console.error)
   }, [ownProfile])
 
