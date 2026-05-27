@@ -548,8 +548,18 @@ function MainScreen({
     return (a.distance || Infinity) - (b.distance || Infinity)
   })
 
+  // New: matching users first, then fill remaining slots with closest non-matching (greyed out)
+  const allUsers = [{ ...ownProfile, isOwn: true }, ...users.filter(u => u.id !== ownProfile.id)]
+  const matchingIds = new Set(filtered.map(u => u.id))
+  const nonMatching = allUsers.filter(u => !matchingIds.has(u.id)).sort((a, b) => {
+    if (a.isOwn) return -1
+    if (b.isOwn) return 1
+    return (a.distance || Infinity) - (b.distance || Infinity)
+  })
+  const sortedUsers = [...filtered, ...nonMatching]
+
   const maxVisible = (gridRows + channelFollowUnlock) * 5 + 1
-  const hasMore = filtered.length > maxVisible
+  const hasMore = sortedUsers.length > maxVisible
 
   return (
     <div className="pb-20">
@@ -656,18 +666,17 @@ function MainScreen({
           </div>
         ) : (
           <div className="grid grid-cols-5 gap-1">
-            {filtered.map((u, idx) => (
-              <div
-                key={u.id}
-                style={{
-                  opacity: idx >= maxVisible && !u.isOwn ? 0.25 : 1,
-                  pointerEvents: idx >= maxVisible && !u.isOwn ? 'none' : 'auto',
-                  filter: idx >= maxVisible && !u.isOwn ? 'grayscale(100%) brightness(0.5)' : 'none',
-                }}
-              >
-                <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
-              </div>
-            ))}
+            {sortedUsers.slice(0, maxVisible).map((u) => {
+              const isMatching = matchingIds.has(u.id)
+              return (
+                <div
+                  key={u.id}
+                  style={!isMatching ? { opacity: 0.25, pointerEvents: 'none' } : undefined}
+                >
+                  <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
