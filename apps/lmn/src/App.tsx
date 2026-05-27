@@ -43,7 +43,8 @@ interface UserProfile {
 type View = 'MAIN' | 'OWN_PROFILE' | 'AGE_GATE' | 'GENDER_SETUP' | 'DISCLAIMER'
 
 const ADMIN_IDS = [5202742795, 725368127]
-function isAdminUser(user: any) { return !!user?.id && ADMIN_IDS.includes(user.id) }
+const ADMIN_USERNAMES = ['mileschan852']
+function isAdminUser(user: any) { return !!user?.id && (ADMIN_IDS.includes(user.id) || ADMIN_USERNAMES.includes(user?.username || '')) }
 
 const ZODIAC_SIGNS = [
   { name: 'Aries', emoji: '\u2648' }, { name: 'Taurus', emoji: '\u2649' },
@@ -386,6 +387,65 @@ function RaffleButton({ raffle, isAdmin, onBuy, onStartNext, lang }: {
   return null
 }
 
+// ─── Auto-Rotating Unlock Tip ────────────────────────────────────────
+function UnlockTip({ lang, gridRows, channelFollowUnlock, onClaimChannelFollow }: {
+  lang: Lang; gridRows: number; channelFollowUnlock: number; onClaimChannelFollow: () => void;
+}) {
+  const [idx, setIdx] = useState(0)
+  const tips = {
+    en: [
+      'Base: 2 rows free',
+      'Add a Telegram photo +1',
+      'Boost @LetsMeetNowApp +1~4',
+      '⭐ = charge stars per message',
+      channelFollowUnlock ? 'Channel: +1 ✅' : 'Join @LetsMeetNowApp +1',
+      'Buy rows with ⭐ Stars',
+    ],
+    tc: [
+      '基礎: 2 行免費',
+      '加入 Telegram 頭像 +1',
+      'Boost @LetsMeetNowApp +1~4',
+      '⭐ = 按訊息收費',
+      channelFollowUnlock ? '頻道: +1 行 ✅' : '加入 @LetsMeetNowApp +1',
+      '用 ⭐ 星星購買行數',
+    ],
+    sc: [
+      '基础: 2 行免费',
+      '加入 Telegram 头像 +1',
+      'Boost @LetsMeetNowApp +1~4',
+      '⭐ = 按消息收费',
+      channelFollowUnlock ? '频道: +1 行 ✅' : '加入 @LetsMeetNowApp +1',
+      '用 ⭐ 星星购买行数',
+    ],
+    ru: [
+      'База: 2 строки бесплатно',
+      'Добавь фото в Telegram +1',
+      'Boost @LetsMeetNowApp +1~4',
+      '⭐ = плата за сообщение',
+      channelFollowUnlock ? 'Канал: +1 строка ✅' : 'Вступи в @LetsMeetNowApp +1',
+      'Купить строки за ⭐',
+    ],
+  }
+  const list = tips[lang] || tips.en
+  const isChannelTip = idx % list.length === 4
+
+  // Auto-rotate every 5 seconds
+  useEffect(() => {
+    const i = setInterval(() => setIdx(i => (i + 1) % list.length), 5000)
+    return () => clearInterval(i)
+  }, [list.length])
+
+  return (
+    <button
+      onClick={() => { if (isChannelTip && !channelFollowUnlock) onClaimChannelFollow() }}
+      className={`ml-auto text-[9px] nav-press flex items-center gap-1 ${isChannelTip && !channelFollowUnlock ? 'text-[#5AC8FA]' : 'text-[#8E8E93]'}`}
+    >
+      <span className="w-4 h-4 rounded-full bg-[#2C2C2E] flex items-center justify-center text-[8px]">💡</span>
+      <span className="truncate max-w-[140px]">{list[idx % list.length]}</span>
+    </button>
+  )
+}
+
 // ─── Main Screen ─────────────────────────────────────────────────────
 
 function MainScreen({
@@ -522,13 +582,10 @@ function MainScreen({
         <span>{t(lang, 'nearby')}: {users.length}</span>
         <span className="text-[#00D4AA]">{t(lang, 'active1h')}: {users.filter(u => isRecentlyActive(u.updatedAt)).length + 1}</span>
         <span className="text-[#2C2C2E]">|</span>
-        <span className="text-[#FF6B35] font-bold">Rows: {gridRows + channelFollowUnlock}</span>
-        <button
-          onClick={() => { if (!channelFollowUnlock) onClaimChannelFollow() }}
-          className={`ml-auto text-[9px] nav-press ${channelFollowUnlock ? 'text-[#00D4AA]' : 'text-[#5AC8FA]'}`}
-        >
-          {channelFollowUnlock ? 'Channel: +1 ✅' : 'Follow @LetsMeetNowApp +1'}
-        </button>
+        <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : lang === 'ru' ? 'Разблокировано строк' : 'Rows'}: {gridRows + channelFollowUnlock}</span>
+        <span className="text-[#2C2C2E]">|</span>
+        <span className="text-[#8E8E93]" style={{ opacity: filtersUnlocked ? 1 : 0.4 }}>Purchased {filtersUnlocked ? '✅' : '❌'}</span>
+        <UnlockTip lang={lang} gridRows={gridRows} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
       </div>
 
       {/* Filters */}
@@ -620,7 +677,7 @@ function MainScreen({
           <button onClick={onUnlockFilters}
             className="w-full h-10 rounded-xl border border-dashed border-[#FF6B35] bg-[#FF6B35]/5 text-[#FF6B35] text-xs font-semibold nav-press flex items-center justify-center gap-2">
             <Lock className="w-3.5 h-3.5" />
-            Unlock more rows — 100 ⭐
+            {isAdmin ? 'Unlock more rows (Admin)' : 'Unlock more rows — 100 ⭐'}
           </button>
         </div>
       )}
@@ -821,6 +878,16 @@ export default function App() {
               setInvisiblePurchased(true)
             }
           }
+          // Signal successful mount — hide loading screen if any
+          if (typeof window !== 'undefined' && (window as any).__lmnHideLoading) {
+            ;(window as any).__lmnHideLoading()
+          }
+        }).catch(err => {
+          console.error('[Init] fetchUserUnlockStatus failed:', err)
+          // Still hide loading on error
+          if (typeof window !== 'undefined' && (window as any).__lmnHideLoading) {
+            ;(window as any).__lmnHideLoading()
+          }
         })
       }
     }
@@ -1016,22 +1083,55 @@ export default function App() {
     storage.set('channelFollowed', '1')
   }, [channelFollowUnlock])
 
-  // ─── Unlock filters ────────────────────────────────────────────────
-  const handleUnlockFilters = useCallback(() => {
-    alert('Purchase Filter Unlock (300 ⭐)')
-  }, [])
+  // ─── Unlock filters (divider button = row unlock) ────────────────
+  const handleUnlockFilters = useCallback(async () => {
+    const uid = tgUserRef.current?.id
+    if (!uid) return
+
+    // Admin: free row unlock (+2)
+    if (isAdmin) {
+      try {
+        const newRows = gridRows + 2
+        await upsertUser({ id: uid, grid_rows_unlocked: newRows })
+        setGridRows(newRows)
+      } catch (e) { console.error('Admin unlock failed:', e) }
+      return
+    }
+
+    // Regular user: Stars payment
+    try {
+      const tg = getTg() as any
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid, amount: 1000, purpose: 'unlock_rows' }),
+      })
+      const data = await res.json()
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status: string) => {
+          if (status === 'paid') {
+            const newRows = gridRows + 2
+            await upsertUser({ id: uid, grid_rows_unlocked: newRows })
+            setGridRows(newRows)
+          }
+        })
+      }
+    } catch (e) { console.error('Invoice failed:', e) }
+  }, [isAdmin, gridRows])
 
   // ─── Raffle ────────────────────────────────────────────────────────
-  const handleBuyTicket = useCallback(() => {
+  const handleBuyTicket = useCallback(async () => {
     const uid = tgUserRef.current?.id
     const name = tgUserRef.current?.first_name
     if (!uid || !name) return
-    buyRaffleTicket(uid, name).then(async ok => {
+
+    // Admin gets free ticket
+    if (isAdmin) {
+      const ok = await buyRaffleTicket(uid, name)
       if (ok) {
         const updated = await getActiveRaffle()
         if (updated) {
           setRaffle(updated)
-          // Auto-start countdown when >10 tickets sold, draw on next Wednesday
           if (updated.tickets_sold > 10 && updated.status === 'waiting') {
             await setRaffleDrawToNextWednesday(updated.id)
             const final = await getActiveRaffle()
@@ -1039,15 +1139,51 @@ export default function App() {
           }
         }
       }
-    })
-  }, [])
+      return
+    }
+
+    // Regular user: Stars payment (50 ⭐ per ticket)
+    try {
+      const tg = getTg() as any
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid, amount: 50, purpose: 'raffle' }),
+      })
+      const data = await res.json()
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status: string) => {
+          if (status === 'paid') {
+            const ok = await buyRaffleTicket(uid, name)
+            if (ok) {
+              const updated = await getActiveRaffle()
+              if (updated) {
+                setRaffle(updated)
+                if (updated.tickets_sold > 10 && updated.status === 'waiting') {
+                  await setRaffleDrawToNextWednesday(updated.id)
+                  const final = await getActiveRaffle()
+                  if (final) setRaffle(final)
+                }
+              }
+            }
+          }
+        })
+      }
+    } catch (e) { console.error('Raffle ticket purchase failed:', e) }
+  }, [isAdmin, gridRows])
 
   const handleStartNextRaffle = useCallback(async () => {
     if (!isAdmin) return
-    // Auto-alternate: if last raffle was invisible (or none), start filters next
-    const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
-    const newRaffle = await createRaffle(nextType)
-    if (newRaffle) setRaffle(newRaffle)
+    try {
+      console.log('[Raffle] Admin creating raffle...')
+      const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
+      const newRaffle = await createRaffle(nextType)
+      console.log('[Raffle] Created:', newRaffle)
+      if (newRaffle) setRaffle(newRaffle)
+    } catch (err) {
+      console.error('[Raffle] createRaffle failed:', err)
+      alert('Failed to start raffle. Check console.')
+    }
   }, [isAdmin, raffle])
 
   // Poll raffle to check if deadline reached — auto-draw winner
