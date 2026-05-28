@@ -938,7 +938,7 @@ export default function App() {
 
   // Premium state
   const [filtersUnlocked, setFiltersUnlocked] = useState(false)
-  const [gridRows, setGridRows] = useState(2)
+  const [gridRows, setGridRows] = useState(1)
   const [isInvisible, setIsInvisible] = useState(false)
   const [invisiblePurchased, setInvisiblePurchased] = useState(false)
   const [invisibleUntil, setInvisibleUntil] = useState<string | null>(null)
@@ -966,7 +966,7 @@ export default function App() {
         // Load unlock status from DB
         fetchUserUnlockStatus(user.id).then(status => {
           if (status) {
-            setGridRows(status.grid_rows_unlocked || 2)
+            setGridRows(status.grid_rows_unlocked || 1)
             setFiltersUnlocked(!!status.filters_unlocked)
             setProfileUnlocked(!!status.profile_unlocked)
             if (status.invisible_until) {
