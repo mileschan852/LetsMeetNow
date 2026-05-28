@@ -521,14 +521,16 @@ function MainScreen({
         ) : (
           <div className="grid grid-cols-5 gap-1">
             {(() => {
+              // Row-based divider: all users in unlocked rows = normal, beyond = greyed out
+              const rowSize = 5
+              const unlockedSlots = gridRowsUnlocked * rowSize + 1 // +1 for own profile
               const visibleSlice = sortedUsers.slice(0, maxVisible)
-              const firstNonMatchingIdx = visibleSlice.findIndex(u => !matchingIds.has(u.id))
-              const showDivider = firstNonMatchingIdx > 0
+              const showDivider = visibleSlice.length > unlockedSlots
               return visibleSlice.map((u, idx) => {
-                const isMatching = matchingIds.has(u.id)
+                const isAboveDivider = idx < unlockedSlots
                 return (
                   <React.Fragment key={u.id}>
-                    {showDivider && idx === firstNonMatchingIdx && (
+                    {showDivider && idx === unlockedSlots && (
                       <div className="col-span-5 py-1">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-px bg-[#2C2C2E]" />
@@ -538,7 +540,7 @@ function MainScreen({
                       </div>
                     )}
                     <div
-                      style={!isMatching ? { opacity: 0.3, pointerEvents: 'none' } : undefined}
+                      style={!isAboveDivider ? { opacity: 0.3, pointerEvents: 'none' } : undefined}
                     >
                       <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
                     </div>
