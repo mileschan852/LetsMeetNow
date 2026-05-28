@@ -520,28 +520,32 @@ function MainScreen({
           </div>
         ) : (
           <div className="grid grid-cols-5 gap-1">
-            {visibleUsers.map((u, idx) => {
-              const isMatching = matchingIds.has(u.id)
-              const isDivider = idx === filtered.length && nonMatching.length > 0
-              return (
-                <React.Fragment key={isDivider ? 'divider' : u.id}>
-                  {isDivider && (
-                    <div className="col-span-5 py-1">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-px bg-[#2C2C2E]" />
-                        <span className="text-[9px] text-[#8E8E93] uppercase tracking-wider">{lang === 'tc' ? '其他用戶' : lang === 'sc' ? '其他用户' : 'Others'}</span>
-                        <div className="flex-1 h-px bg-[#2C2C2E]" />
+            {(() => {
+              const visibleSlice = sortedUsers.slice(0, maxVisible)
+              const firstNonMatchingIdx = visibleSlice.findIndex(u => !matchingIds.has(u.id))
+              const showDivider = firstNonMatchingIdx > 0
+              return visibleSlice.map((u, idx) => {
+                const isMatching = matchingIds.has(u.id)
+                return (
+                  <React.Fragment key={u.id}>
+                    {showDivider && idx === firstNonMatchingIdx && (
+                      <div className="col-span-5 py-1">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-px bg-[#2C2C2E]" />
+                          <span className="text-[9px] text-[#8E8E93] uppercase tracking-wider">{lang === 'tc' ? '其他用戶' : lang === 'sc' ? '其他用户' : 'Others'}</span>
+                          <div className="flex-1 h-px bg-[#2C2C2E]" />
+                        </div>
                       </div>
+                    )}
+                    <div
+                      style={!isMatching ? { opacity: 0.3, pointerEvents: 'none' } : undefined}
+                    >
+                      <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
                     </div>
-                  )}
-                  <div
-                    style={!isMatching ? { opacity: 0.3, pointerEvents: 'none' } : undefined}
-                  >
-                    <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
-                  </div>
-                </React.Fragment>
-              )
-            })}
+                  </React.Fragment>
+                )
+              })
+            })()}
           </div>
         )}
       </div>
