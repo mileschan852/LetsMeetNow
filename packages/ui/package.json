@@ -1,8 +1,0 @@
-{
-  "name": "dating-ui",
-  "version": "1.0.0",
-  "type": "module",
-  "exports": {
-    "./components": "./src/index.ts"
-  }
-}
