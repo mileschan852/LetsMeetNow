@@ -1,429 +1,284 @@
-// Shared i18n system — base translations + app-specific overlays
-// Usage: import { t, tPref, getLangLabel, type Lang } from './i18n'
+// ─── Internationalization ───────────────────────────────────────────
 
-export type Lang = 'en' | 'tc' | 'sc' | 'ru'
+import type { Lang } from './types'
 
-const BASE: Record<Lang, Record<string, string>> = {
-  en: {
-    online: 'online',
-    nearby: 'Nearby',
-    active1h: 'Active (1h)',
-    message: 'Message',
-    refresh: 'Refresh',
-    back: 'Back',
-    save: 'Save',
-    cancel: 'Cancel',
-    locationRequired: 'Location Required',
-    locationDesc: 'We need your location to show people nearby. Your location is never stored permanently.',
-    permissionDenied: 'Permission Denied',
-    enableLocation: 'Please enable location access in your browser or app settings.',
-    tapToRetry: 'Tap to Retry',
-    checkingLoc: 'Checking location...',
-    dbNotConfigured: 'Database not configured',
-    dbConfigHint: 'Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.',
-    filterUnlockTitle: 'Unlock Filters',
-    filterUnlockDesc: 'Unlock all filter options permanently',
-    gridUnlockTitle: 'Unlock More Rows',
-    gridUnlockDesc: 'See more profiles in the grid',
-    invisibleTitle: 'Invisible Mode',
-    invisibleDesc: 'Hide your profile from the grid. You can still browse.',
-    purchase: 'Purchase',
-    stars: 'Stars',
-    yourProfile: 'Your Profile',
-    height: 'Height',
-    weight: 'Weight',
-    cm: 'cm',
-    kg: 'kg',
-    locked: 'locked',
-    today: 'Today',
-    filterAll: 'All',
-    publicChat: 'Public Chat',
-    noMessages: 'No messages yet. Be the first!',
-    typeMessage: 'Type a message...',
-    send: 'Send',
-    travelGuide: 'Travel Guide',
-    noEntries: 'No entries yet.',
-  },
-  tc: {
-    online: '在線',
-    nearby: '附近',
-    active1h: '活躍 (1小時)',
-    message: '訊息',
-    refresh: '刷新',
-    back: '返回',
-    save: '儲存',
-    cancel: '取消',
-    locationRequired: '需要位置',
-    locationDesc: '我們需要您的位置來顯示附近的人。您的位置不會被永久儲存。',
-    permissionDenied: '權限被拒絕',
-    enableLocation: '請在瀏覽器或應用程式設定中啟用位置存取。',
-    tapToRetry: '點擊重試',
-    checkingLoc: '正在檢查位置...',
-    dbNotConfigured: '資料庫未設定',
-    dbConfigHint: '請在 .env 檔案中設定 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。',
-    filterUnlockTitle: '解鎖篩選器',
-    filterUnlockDesc: '永久解鎖所有篩選選項',
-    gridUnlockTitle: '解鎖更多行',
-    gridUnlockDesc: '在網格中看到更多個人資料',
-    invisibleTitle: '隱身模式',
-    invisibleDesc: '從網格中隱藏您的個人資料。您仍然可以瀏覽。',
-    purchase: '購買',
-    stars: '星星',
-    yourProfile: '您的個人資料',
-    height: '身高',
-    weight: '體重',
-    cm: '厘米',
-    kg: '公斤',
-    locked: '已鎖定',
-    today: '今天',
-    filterAll: '全部',
-    publicChat: '公開聊天',
-    noMessages: '暫無訊息。成為第一個發送者！',
-    typeMessage: '輸入訊息...',
-    send: '發送',
-    travelGuide: '旅遊指南',
-    noEntries: '暫無資料。',
-  },
-  sc: {
-    online: '在线',
-    nearby: '附近',
-    active1h: '活跃 (1小时)',
-    message: '消息',
-    refresh: '刷新',
-    back: '返回',
-    save: '保存',
-    cancel: '取消',
-    locationRequired: '需要位置',
-    locationDesc: '我们需要您的位置来显示附近的人。您的位置不会被永久存储。',
-    permissionDenied: '权限被拒绝',
-    enableLocation: '请在浏览器或应用程序设置中启用位置访问。',
-    tapToRetry: '点击重试',
-    checkingLoc: '正在检查位置...',
-    dbNotConfigured: '数据库未配置',
-    dbConfigHint: '请在 .env 文件中设置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY。',
-    filterUnlockTitle: '解锁筛选器',
-    filterUnlockDesc: '永久解锁所有筛选选项',
-    gridUnlockTitle: '解锁更多行',
-    gridUnlockDesc: '在网格中看到更多个人资料',
-    invisibleTitle: '隐身模式',
-    invisibleDesc: '从网格中隐藏您的个人资料。您仍然可以浏览。',
-    purchase: '购买',
-    stars: '星星',
-    yourProfile: '您的个人资料',
-    height: '身高',
-    weight: '体重',
-    cm: '厘米',
-    kg: '公斤',
-    locked: '已锁定',
-    today: '今天',
-    filterAll: '全部',
-    publicChat: '公开聊天',
-    noMessages: '暂无消息。成为第一个发送者！',
-    typeMessage: '输入消息...',
-    send: '发送',
-    travelGuide: '旅游指南',
-    noEntries: '暂无资料。',
-  },
-  ru: {
-    online: 'онлайн',
-    nearby: 'Рядом',
-    active1h: 'Активные (1ч)',
-    message: 'Сообщение',
-    refresh: 'Обновить',
-    back: 'Назад',
-    save: 'Сохранить',
-    cancel: 'Отмена',
-    locationRequired: 'Требуется геолокация',
-    locationDesc: 'Нам нужно ваше местоположение, чтобы показать людей поблизости. Ваше местоположение никогда не хранится постоянно.',
-    permissionDenied: 'Разрешение отклонено',
-    enableLocation: 'Пожалуйста, включите доступ к геолокации в настройках браузера или приложения.',
-    tapToRetry: 'Нажмите, чтобы повторить',
-    checkingLoc: 'Проверка местоположения...',
-    dbNotConfigured: 'База данных не настроена',
-    dbConfigHint: 'Пожалуйста, установите VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в файле .env.',
-    filterUnlockTitle: 'Разблокировать фильтры',
-    filterUnlockDesc: 'Разблокировать все параметры фильтра навсегда',
-    gridUnlockTitle: 'Разблокировать больше строк',
-    gridUnlockDesc: 'Увидеть больше профилей в сетке',
-    invisibleTitle: 'Режим невидимки',
-    invisibleDesc: 'Скрыть ваш профиль из сетки. Вы все еще можете просматривать.',
-    purchase: 'Купить',
-    stars: 'Звезды',
-    yourProfile: 'Ваш профиль',
-    height: 'Рост',
-    weight: 'Вес',
-    cm: 'см',
-    kg: 'кг',
-    locked: 'заблокировано',
-    today: 'Сегодня',
-    filterAll: 'Все',
-    publicChat: 'Общий чат',
-    noMessages: 'Пока нет сообщений. Будьте первым!',
-    typeMessage: 'Введите сообщение...',
-    send: 'Отправить',
-    travelGuide: 'Путеводитель',
-    noEntries: 'Пока нет записей.',
-  },
-}
+export const DEFAULT_LANG: Lang = 'en'
 
-// ─── HKMOD-specific ──────────────────────────────────────────────────
-
-const HKMOD: Record<Lang, Record<string, string>> = {
-  en: {
-    roleB: 'Bottom',
-    roleVB: 'Vers Bottom',
-    roleV: 'Versatile',
-    roleVT: 'Vers Top',
-    roleT: 'Top',
-    roleSide: 'Side',
-    prefSafe: 'Safe',
-    prefRaw: 'Raw',
-    prefClean: 'Clean',
-    prefParty: 'Party',
-    prefPartyV: 'Party✓',
-    pref1on1: '1on1',
-    prefGroup: 'Group',
-    prefHost: 'Host',
-    prefTravel: 'Travel',
-    prefOutdoor: 'Outdoor',
-    prefSauna: 'Sauna',
-  },
-  tc: {
-    roleB: '零號',
-    roleVB: '偏零號',
-    roleV: '雙性',
-    roleVT: '偏一號',
-    roleT: '一號',
-    roleSide: 'Side',
-    prefSafe: '安全',
-    prefRaw: '原始',
-    prefClean: '乾淨',
-    prefParty: '派對',
-    prefPartyV: '派對✓',
-    pref1on1: '一對一',
-    prefGroup: '多人',
-    prefHost: '接待',
-    prefTravel: '出遊',
-    prefOutdoor: '戶外',
-    prefSauna: '桑拿',
-  },
-  sc: {
-    roleB: '零号',
-    roleVB: '偏零号',
-    roleV: '双性',
-    roleVT: '偏一号',
-    roleT: '一号',
-    roleSide: 'Side',
-    prefSafe: '安全',
-    prefRaw: '原始',
-    prefClean: '干净',
-    prefParty: '派对',
-    prefPartyV: '派对✓',
-    pref1on1: '一对一',
-    prefGroup: '多人',
-    prefHost: '接待',
-    prefTravel: '出游',
-    prefOutdoor: '户外',
-    prefSauna: '桑拿',
-  },
-  ru: {
-    roleB: 'Пассив',
-    roleVB: 'Универсал-Пассив',
-    roleV: 'Универсал',
-    roleVT: 'Универсал-Актив',
-    roleT: 'Актив',
-    roleSide: 'Сайд',
-    prefSafe: 'Безопасно',
-    prefRaw: 'Грубо',
-    prefClean: 'Чисто',
-    prefParty: 'Вечеринка',
-    prefPartyV: 'Вечеринка✓',
-    pref1on1: '1на1',
-    prefGroup: 'Группа',
-    prefHost: 'Принимаю',
-    prefTravel: 'Путешествую',
-    prefOutdoor: 'На улице',
-    prefSauna: 'Сауна',
-  },
-}
-
-// ─── LMN-specific ────────────────────────────────────────────────────
-
-const LMN: Record<Lang, Record<string, string>> = {
-  en: {
-    genderMale: 'Male',
-    genderFemale: 'Female',
-    seekingMen: 'Men',
-    seekingWomen: 'Women',
-    zodiacAries: 'Aries',
-    zodiacTaurus: 'Taurus',
-    zodiacGemini: 'Gemini',
-    zodiacCancer: 'Cancer',
-    zodiacLeo: 'Leo',
-    zodiacVirgo: 'Virgo',
-    zodiacLibra: 'Libra',
-    zodiacScorpio: 'Scorpio',
-    zodiacSagittarius: 'Sagittarius',
-    zodiacCapricorn: 'Capricorn',
-    zodiacAquarius: 'Aquarius',
-    zodiacPisces: 'Pisces',
-    seekBrowse: 'Just Browsing',
-    seekChat: 'Chat',
-    seekMeetup: 'Meetup',
-    seekWebcam: 'Webcam',
-    meetCoffee: 'Coffee',
-    meetMeals: 'Meals',
-    meetOutdoor: 'Outdoor',
-    meetCharity: 'Charity',
-    meetBar: 'Bar & Parties',
-    meetBed: 'Bed',
-    ageAny: 'Any age',
-    ageOlder: 'Older',
-    ageSame: 'Same age',
-    ageYounger: 'Younger',
-  },
-  tc: {
-    genderMale: '男',
-    genderFemale: '女',
-    seekingMen: '男',
-    seekingWomen: '女',
-    zodiacAries: '白羊座',
-    zodiacTaurus: '金牛座',
-    zodiacGemini: '雙子座',
-    zodiacCancer: '巨蟹座',
-    zodiacLeo: '獅子座',
-    zodiacVirgo: '處女座',
-    zodiacLibra: '天秤座',
-    zodiacScorpio: '天蠍座',
-    zodiacSagittarius: '射手座',
-    zodiacCapricorn: '摩羯座',
-    zodiacAquarius: '水瓶座',
-    zodiacPisces: '雙魚座',
-    seekBrowse: '隨便看看',
-    seekChat: '聊天',
-    seekMeetup: '見面',
-    seekWebcam: '視訊',
-    meetCoffee: '咖啡',
-    meetMeals: '用餐',
-    meetOutdoor: '戶外',
-    meetCharity: '慈善',
-    meetBar: '酒吧派對',
-    meetBed: '床伴',
-    ageAny: '任何年齡',
-    ageOlder: '年長',
-    ageSame: '同年',
-    ageYounger: '年輕',
-  },
-  sc: {
-    genderMale: '男',
-    genderFemale: '女',
-    seekingMen: '男',
-    seekingWomen: '女',
-    zodiacAries: '白羊座',
-    zodiacTaurus: '金牛座',
-    zodiacGemini: '双子座',
-    zodiacCancer: '巨蟹座',
-    zodiacLeo: '狮子座',
-    zodiacVirgo: '处女座',
-    zodiacLibra: '天秤座',
-    zodiacScorpio: '天蝎座',
-    zodiacSagittarius: '射手座',
-    zodiacCapricorn: '摩羯座',
-    zodiacAquarius: '水瓶座',
-    zodiacPisces: '双鱼座',
-    seekBrowse: '随便看看',
-    seekChat: '聊天',
-    seekMeetup: '见面',
-    seekWebcam: '视频',
-    meetCoffee: '咖啡',
-    meetMeals: '用餐',
-    meetOutdoor: '户外',
-    meetCharity: '慈善',
-    meetBar: '酒吧派对',
-    meetBed: '床伴',
-    ageAny: '任何年龄',
-    ageOlder: '年长',
-    ageSame: '同年',
-    ageYounger: '年轻',
-  },
-  ru: {
-    genderMale: 'Мужчина',
-    genderFemale: 'Женщина',
-    seekingMen: 'Мужчин',
-    seekingWomen: 'Женщин',
-    zodiacAries: 'Овен',
-    zodiacTaurus: 'Телец',
-    zodiacGemini: 'Близнецы',
-    zodiacCancer: 'Рак',
-    zodiacLeo: 'Лев',
-    zodiacVirgo: 'Дева',
-    zodiacLibra: 'Весы',
-    zodiacScorpio: 'Скорпион',
-    zodiacSagittarius: 'Стрелец',
-    zodiacCapricorn: 'Козерог',
-    zodiacAquarius: 'Водолей',
-    zodiacPisces: 'Рыбы',
-    seekBrowse: 'Просто смотрю',
-    seekChat: 'Чат',
-    seekMeetup: 'Встреча',
-    seekWebcam: 'Вебкам',
-    meetCoffee: 'Кофе',
-    meetMeals: 'Ужин',
-    meetOutdoor: 'На природе',
-    meetCharity: 'Благотворительность',
-    meetBar: 'Бар и вечеринки',
-    meetBed: 'Постель',
-    ageAny: 'Любой возраст',
-    ageOlder: 'Старше',
-    ageSame: 'Того же возраста',
-    ageYounger: 'Младше',
-  },
-}
-
-// ─── t() — base + app overlay ──────────────────────────────────────
-
-export function t(lang: Lang, key: string, app?: 'hkmod' | 'lmn'): string {
-  const appDict = app === 'hkmod' ? HKMOD : app === 'lmn' ? LMN : null
-  return appDict?.[lang]?.[key] || BASE[lang]?.[key] || BASE.en[key] || key
-}
-
-// Preference label helper (HKMOD)
-export function tPref(lang: Lang, val: string): string {
-  const map: Record<string, string> = {
-    Safe: t(lang, 'prefSafe', 'hkmod'),
-    Raw: t(lang, 'prefRaw', 'hkmod'),
-    Clean: t(lang, 'prefClean', 'hkmod'),
-    Party: t(lang, 'prefParty', 'hkmod'),
-    'Party✓': t(lang, 'prefPartyV', 'hkmod'),
-    '1on1': t(lang, 'pref1on1', 'hkmod'),
-    Group: t(lang, 'prefGroup', 'hkmod'),
-    Host: t(lang, 'prefHost', 'hkmod'),
-    Travel: t(lang, 'prefTravel', 'hkmod'),
-    Outdoor: t(lang, 'prefOutdoor', 'hkmod'),
-    Sauna: t(lang, 'prefSauna', 'hkmod'),
-  }
-  return map[val] || val
-}
-
-// Role label helper (HKMOD)
-export function tRole(lang: Lang, role: string): string {
-  const map: Record<string, string> = {
-    B: t(lang, 'roleB', 'hkmod'),
-    VB: t(lang, 'roleVB', 'hkmod'),
-    V: t(lang, 'roleV', 'hkmod'),
-    VT: t(lang, 'roleVT', 'hkmod'),
-    T: t(lang, 'roleT', 'hkmod'),
-    Side: t(lang, 'roleSide', 'hkmod'),
-  }
-  return map[role] || role
+export function t(lang: Lang, key: string): string {
+  return TRANSLATIONS[key]?.[lang] || TRANSLATIONS[key]?.[DEFAULT_LANG] || key
 }
 
 export function getLangLabel(lang: Lang): string {
-  return { en: 'EN', tc: '繁', sc: '简', ru: 'RU' }[lang] || 'EN'
+  const labels: Record<Lang, string> = {
+    en: 'English', tc: '繁體中文', sc: '简体中文',
+    ru: 'Русский', ja: '日本語', ko: '한국어',
+    de: 'Deutsch', fr: 'Français', es: 'Español',
+    th: 'ไทย', vi: 'Tiếng Việt',
+  }
+  return labels[lang] || lang
 }
 
-// Zodiac name helper (LMN)
-export function tZodiac(lang: Lang, sign: string): string {
-  const key = 'zodiac' + sign
-  return t(lang, key, 'lmn')
+const TRANSLATIONS: Record<string, Record<Lang, string>> = {
+  // Grid / Navigation
+  nearby: {
+    en: 'Nearby', tc: '附近', sc: '附近', ru: 'Рядом', ja: '近く', ko: '근처',
+    de: 'In der Nähe', fr: 'Proche', es: 'Cerca', th: 'ใกล้เคียง', vi: 'Gần đây',
+  },
+  active1h: {
+    en: 'Active 1h', tc: '1小時內活躍', sc: '1小时内活跃', ru: 'Активны 1ч', ja: '1時間以内', ko: '1시간 내',
+    de: 'Aktiv 1h', fr: 'Actif 1h', es: 'Activo 1h', th: 'ใช้งาน 1ชม.', vi: 'Hoạt động 1h',
+  },
+  refresh: {
+    en: 'Refresh', tc: '刷新', sc: '刷新', ru: 'Обновить', ja: '更新', ko: '새로고침',
+    de: 'Aktualisieren', fr: 'Actualiser', es: 'Actualizar', th: 'รีเฟรช', vi: 'Làm mới',
+  },
+  unlock: {
+    en: 'Unlock', tc: '解鎖', sc: '解锁', ru: 'Разблокировать', ja: 'ロック解除', ko: '잠금 해제',
+    de: 'Freischalten', fr: 'Déverrouiller', es: 'Desbloquear', th: 'ปลดล็อค', vi: 'Mở khóa',
+  },
+  unlocked: {
+    en: 'Unlocked', tc: '已解鎖', sc: '已解锁', ru: 'Разблокировано', ja: '解除済み', ko: '해제됨',
+    de: 'Freigeschaltet', fr: 'Déverrouillé', es: 'Desbloqueado', th: 'ปลดล็อคแล้ว', vi: 'Đã mở khóa',
+  },
+  lock: {
+    en: 'Lock', tc: '鎖定', sc: '锁定', ru: 'Заблокировать', ja: 'ロック', ko: '잠금',
+    de: 'Sperren', fr: 'Verrouiller', es: 'Bloquear', th: 'ล็อค', vi: 'Khóa',
+  },
+  rows: {
+    en: 'Rows', tc: '行數', sc: '行数', ru: 'Строк', ja: '行', ko: '행',
+    de: 'Reihen', fr: 'Lignes', es: 'Filas', th: 'แถว', vi: 'Hàng',
+  },
+
+  // Profile
+  profile: {
+    en: 'Profile', tc: '個人資料', sc: '个人资料', ru: 'Профиль', ja: 'プロフィール', ko: '프로필',
+    de: 'Profil', fr: 'Profil', es: 'Perfil', th: 'โปรไฟล์', vi: 'Hồ sơ',
+  },
+  editProfile: {
+    en: 'Edit Profile', tc: '編輯個人資料', sc: '编辑个人资料', ru: 'Редактировать', ja: '編集', ko: '프로필 수정',
+    de: 'Profil bearbeiten', fr: 'Modifier', es: 'Editar perfil', th: 'แก้ไขโปรไฟล์', vi: 'Chỉnh sửa',
+  },
+  name: {
+    en: 'Name', tc: '名稱', sc: '名称', ru: 'Имя', ja: '名前', ko: '이름',
+    de: 'Name', fr: 'Nom', es: 'Nombre', th: 'ชื่อ', vi: 'Tên',
+  },
+  age: {
+    en: 'Age', tc: '年齡', sc: '年龄', ru: 'Возраст', ja: '年齢', ko: '나이',
+    de: 'Alter', fr: 'Âge', es: 'Edad', th: 'อายุ', vi: 'Tuổi',
+  },
+  height: {
+    en: 'Height', tc: '身高', sc: '身高', ru: 'Рост', ja: '身長', ko: '키',
+    de: 'Größe', fr: 'Taille', es: 'Altura', th: 'ส่วนสูง', vi: 'Chiều cao',
+  },
+  weight: {
+    en: 'Weight', tc: '體重', sc: '体重', ru: 'Вес', ja: '体重', ko: '몸무게',
+    de: 'Gewicht', fr: 'Poids', es: 'Peso', th: 'น้ำหนัก', vi: 'Cân nặng',
+  },
+  bodyType: {
+    en: 'Body Type', tc: '體型', sc: '体型', ru: 'Телосложение', ja: '体型', ko: '체형',
+    de: 'Körpertyp', fr: 'Corps', es: 'Tipo de cuerpo', th: 'รูปร่าง', vi: 'Vóc dáng',
+  },
+  skinTone: {
+    en: 'Skin Tone', tc: '膚色', sc: '肤色', ru: 'Тон кожи', ja: '肌色', ko: '피부톤',
+    de: 'Hautton', fr: 'Teint', es: 'Tono de piel', th: 'สีผิว', vi: 'Màu da',
+  },
+  zodiac: {
+    en: 'Zodiac', tc: '星座', sc: '星座', ru: 'Зодиак', ja: '星座', ko: '별자리',
+    de: 'Tierkreis', fr: 'Zodiaque', es: 'Zodiaco', th: 'ราศี', vi: 'Cung hoàng đạo',
+  },
+  bio: {
+    en: 'Bio', tc: '自我介紹', sc: '自我介绍', ru: 'О себе', ja: '自己紹介', ko: '소개',
+    de: 'Bio', fr: 'Bio', es: 'Biografía', th: 'ประวัติ', vi: 'Giới thiệu',
+  },
+  into: {
+    en: 'Into', tc: '喜好', sc: '喜好', ru: 'Интересы', ja: '趣味', ko: '취향',
+    de: 'Interessen', fr: 'Intérêts', es: 'Intereses', th: 'สิ่งที่ชอบ', vi: 'Sở thích',
+  },
+  lookingFor: {
+    en: 'Looking For', tc: '尋找', sc: '寻找', ru: 'Ищу', ja: '探している', ko: '찾는 것',
+    de: 'Suche nach', fr: 'Recherche', es: 'Buscando', th: 'กำลังมองหา', vi: 'Tìm kiếm',
+  },
+  location: {
+    en: 'Location', tc: '位置', sc: '位置', ru: 'Местоположение', ja: '位置', ko: '위치',
+    de: 'Standort', fr: 'Lieu', es: 'Ubicación', th: 'ตำแหน่ง', vi: 'Vị trí',
+  },
+  distance: {
+    en: 'Distance', tc: '距離', sc: '距离', ru: 'Расстояние', ja: '距離', ko: '거리',
+    de: 'Entfernung', fr: 'Distance', es: 'Distancia', th: 'ระยะทาง', vi: 'Khoảng cách',
+  },
+
+  // Actions
+  sendMessage: {
+    en: 'Send Message', tc: '發送訊息', sc: '发送讯息', ru: 'Отправить', ja: 'メッセージ', ko: '메시지',
+    de: 'Nachricht', fr: 'Message', es: 'Enviar', th: 'ส่งข้อความ', vi: 'Gửi tin',
+  },
+  chat: {
+    en: 'Chat', tc: '聊天', sc: '聊天', ru: 'Чат', ja: 'チャット', ko: '채팅',
+    de: 'Chat', fr: 'Chat', es: 'Chat', th: 'แชท', vi: 'Trò chuyện',
+  },
+  follow: {
+    en: 'Follow', tc: '追蹤', sc: '追踪', ru: 'Подписаться', ja: 'フォロー', ko: '팔로우',
+    de: 'Folgen', fr: 'Suivre', es: 'Seguir', th: 'ติดตาม', vi: 'Theo dõi',
+  },
+  unfollow: {
+    en: 'Unfollow', tc: '取消追蹤', sc: '取消追踪', ru: 'Отписаться', ja: 'フォロー解除', ko: '언팔로우',
+    de: 'Entfolgen', fr: 'Ne plus suivre', es: 'Dejar de seguir', th: 'เลิกติดตาม', vi: 'Bỏ theo dõi',
+  },
+  block: {
+    en: 'Block', tc: '封鎖', sc: '封锁', ru: 'Заблокировать', ja: 'ブロック', ko: '차단',
+    de: 'Blockieren', fr: 'Bloquer', es: 'Bloquear', th: 'บล็อค', vi: 'Chặn',
+  },
+  unblock: {
+    en: 'Unblock', tc: '解除封鎖', sc: '解除封锁', ru: 'Разблокировать', ja: 'ブロック解除', ko: '차단 해제',
+    de: 'Entblocken', fr: 'Débloquer', es: 'Desbloquear', th: 'ปลดบล็อค', vi: 'Bỏ chặn',
+  },
+  report: {
+    en: 'Report', tc: '舉報', sc: '举报', ru: 'Пожаловаться', ja: '報告', ko: '신고',
+    de: 'Melden', fr: 'Signaler', es: 'Reportar', th: 'รายงาน', vi: 'Báo cáo',
+  },
+
+  // Payments / Stars
+  stars: {
+    en: 'Stars', tc: '星星', sc: '星星', ru: 'Звёзды', ja: 'スター', ko: '별',
+    de: 'Sterne', fr: 'Étoiles', es: 'Estrellas', th: 'ดาว', vi: 'Sao',
+  },
+  buyStars: {
+    en: 'Buy Stars', tc: '購買星星', sc: '购买星星', ru: 'Купить звёзды', ja: 'スター購入', ko: '별 구매',
+    de: 'Sterne kaufen', fr: 'Acheter', es: 'Comprar', th: 'ซื้อดาว', vi: 'Mua sao',
+  },
+  unlockFilters: {
+    en: 'Unlock Filters', tc: '解鎖篩選', sc: '解锁筛选', ru: 'Разблокировать фильтры', ja: 'フィルター解除', ko: '필터 잠금 해제',
+    de: 'Filter freischalten', fr: 'Déverrouiller filtres', es: 'Desbloquear filtros', th: 'ปลดล็อคตัวกรอง', vi: 'Mở khóa bộ lọc',
+  },
+  invisibleMode: {
+    en: 'Invisible Mode', tc: '隱形模式', sc: '隐形模式', ru: 'Невидимый режим', ja: '透明モード', ko: '투명 모드',
+    de: 'Unsichtbarer Modus', fr: 'Mode invisible', es: 'Modo invisible', th: 'โหมดล่องหน', vi: 'Chế độ ẩn',
+  },
+  raffleTicket: {
+    en: 'Raffle Ticket', tc: '抽獎券', sc: '抽奖券', ru: 'Лотерейный билет', ja: '抽選券', ko: '추첨권',
+    de: 'Los', fr: 'Ticket', es: 'Boleto', th: 'ตั๋วจับรางวัล', vi: 'Vé xổ số',
+  },
+  boostProfile: {
+    en: 'Boost Profile', tc: '提升曝光', sc: '提升曝光', ru: 'Продвинуть', ja: 'ブースト', ko: '부스트',
+    de: 'Profil boosten', fr: 'Booster', es: 'Impulsar', th: 'บูสต์โปรไฟล์', vi: 'Tăng cường',
+  },
+  price: {
+    en: 'Price', tc: '價格', sc: '价格', ru: 'Цена', ja: '価格', ko: '가격',
+    de: 'Preis', fr: 'Prix', es: 'Precio', th: 'ราคา', vi: 'Giá',
+  },
+  duration: {
+    en: 'Duration', tc: '有效期', sc: '有效期', ru: 'Длительность', ja: '期間', ko: '기간',
+    de: 'Dauer', fr: 'Durée', es: 'Duración', th: 'ระยะเวลา', vi: 'Thời hạn',
+  },
+  days: {
+    en: 'days', tc: '天', sc: '天', ru: 'дней', ja: '日', ko: '일',
+    de: 'Tage', fr: 'jours', es: 'días', th: 'วัน', vi: 'ngày',
+  },
+
+  // Status
+  online: {
+    en: 'Online', tc: '在線', sc: '在线', ru: 'Онлайн', ja: 'オンライン', ko: '온라인',
+    de: 'Online', fr: 'En ligne', es: 'En línea', th: 'ออนไลน์', vi: 'Trực tuyến',
+  },
+  offline: {
+    en: 'Offline', tc: '離線', sc: '离线', ru: 'Офлайн', ja: 'オフライン', ko: '오프라인',
+    de: 'Offline', fr: 'Hors ligne', es: 'Desconectado', th: 'ออฟไลน์', vi: 'Ngoại tuyến',
+  },
+  recently: {
+    en: 'Recently', tc: '最近', sc: '最近', ru: 'Недавно', ja: '最近', ko: '최근',
+    de: 'Kürzlich', fr: 'Récemment', es: 'Recientemente', th: 'ล่าสุด', vi: 'Gần đây',
+  },
+  away: {
+    en: 'Away', tc: '離開', sc: '离开', ru: 'Отошёл', ja: '離席', ko: '자리 비움',
+    de: 'Abwesend', fr: 'Absent', es: 'Ausente', th: 'ไม่อยู่', vi: 'Vắng mặt',
+  },
+
+  // Misc
+  save: {
+    en: 'Save', tc: '儲存', sc: '储存', ru: 'Сохранить', ja: '保存', ko: '저장',
+    de: 'Speichern', fr: 'Enregistrer', es: 'Guardar', th: 'บันทึก', vi: 'Lưu',
+  },
+  cancel: {
+    en: 'Cancel', tc: '取消', sc: '取消', ru: 'Отмена', ja: 'キャンセル', ko: '취소',
+    de: 'Abbrechen', fr: 'Annuler', es: 'Cancelar', th: 'ยกเลิก', vi: 'Hủy',
+  },
+  done: {
+    en: 'Done', tc: '完成', sc: '完成', ru: 'Готово', ja: '完了', ko: '완료',
+    de: 'Fertig', fr: 'Terminé', es: 'Hecho', th: 'เสร็จสิ้น', vi: 'Xong',
+  },
+  close: {
+    en: 'Close', tc: '關閉', sc: '关闭', ru: 'Закрыть', ja: '閉じる', ko: '닫기',
+    de: 'Schließen', fr: 'Fermer', es: 'Cerrar', th: 'ปิด', vi: 'Đóng',
+  },
+  back: {
+    en: 'Back', tc: '返回', sc: '返回', ru: 'Назад', ja: '戻る', ko: '뒤로',
+    de: 'Zurück', fr: 'Retour', es: 'Atrás', th: 'กลับ', vi: 'Quay lại',
+  },
+  loading: {
+    en: 'Loading...', tc: '載入中...', sc: '载入中...', ru: 'Загрузка...', ja: '読み込み中...', ko: '로딩 중...',
+    de: 'Laden...', fr: 'Chargement...', es: 'Cargando...', th: 'กำลังโหลด...', vi: 'Đang tải...',
+  },
+  error: {
+    en: 'Error', tc: '錯誤', sc: '错误', ru: 'Ошибка', ja: 'エラー', ko: '오류',
+    de: 'Fehler', fr: 'Erreur', es: 'Error', th: 'ข้อผิดพลาด', vi: 'Lỗi',
+  },
+  retry: {
+    en: 'Retry', tc: '重試', sc: '重试', ru: 'Повторить', ja: '再試行', ko: '재시도',
+    de: 'Wiederholen', fr: 'Réessayer', es: 'Reintentar', th: 'ลองใหม่', vi: 'Thử lại',
+  },
+  noResults: {
+    en: 'No results', tc: '沒有結果', sc: '没有结果', ru: 'Нет результатов', ja: '結果なし', ko: '결과 없음',
+    de: 'Keine Ergebnisse', fr: 'Aucun résultat', es: 'Sin resultados', th: 'ไม่มีผลลัพธ์', vi: 'Không có kết quả',
+  },
+}
+
+// ─── Zodiac ─────────────────────────────────────────────────────────
+
+export const ZODIAC_SIGNS = [
+  { name: 'Aries', emoji: '♈' },
+  { name: 'Taurus', emoji: '♉' },
+  { name: 'Gemini', emoji: '♊' },
+  { name: 'Cancer', emoji: '♋' },
+  { name: 'Leo', emoji: '♌' },
+  { name: 'Virgo', emoji: '♍' },
+  { name: 'Libra', emoji: '♎' },
+  { name: 'Scorpio', emoji: '♏' },
+  { name: 'Sagittarius', emoji: '♐' },
+  { name: 'Capricorn', emoji: '♑' },
+  { name: 'Aquarius', emoji: '♒' },
+  { name: 'Pisces', emoji: '♓' },
+] as const
+
+export function getZodiac(birthDate: string): string {
+  const date = new Date(birthDate)
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+
+  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries'
+  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus'
+  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini'
+  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer'
+  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo'
+  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo'
+  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra'
+  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio'
+  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius'
+  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'Capricorn'
+  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius'
+  return 'Pisces'
+}
+
+export function getZodiacEmoji(zodiac: string): string {
+  return ZODIAC_SIGNS.find(z => z.name === zodiac)?.emoji || '✨'
+}
+
+export function getAge(birthDate: string): number {
+  const today = new Date()
+  const birth = new Date(birthDate)
+  let age = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--
+  }
+  return age
 }

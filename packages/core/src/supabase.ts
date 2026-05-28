@@ -1,307 +1,159 @@
-// Shared Supabase REST Client for HKMOD & LMN
-// Supports both app schemas in the same users table
+// ─── Supabase Client ────────────────────────────────────────────────
+// Shared Supabase operations for dating apps
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fngcjkclxxodjaiqkfkm.supabase.co'
-const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+import type { DbUser, Raffle, FlyingMessage } from './types'
 
-export const hasValidKey = ANON_KEY.startsWith('eyJ') && ANON_KEY.length > 50
-
-const headers = {
-  'apikey': ANON_KEY,
-  'Authorization': `Bearer ${ANON_KEY}`,
+const SB_HEADERS = (key: string) => ({
+  'apikey': key,
+  'Authorization': `Bearer ${key}`,
   'Content-Type': 'application/json',
   'Prefer': 'return=representation',
-}
+})
 
-// ─── Zodiac ──────────────────────────────────────────────────────────
+export function createSupabaseClient(url: string, key: string) {
+  const headers = SB_HEADERS(key)
 
-export function getZodiac(dob: string): string {
-  const d = new Date(dob)
-  const m = d.getMonth() + 1
-  const day = d.getDate()
-  if ((m === 1 && day >= 20) || (m === 2 && day <= 18)) return 'Aquarius'
-  if ((m === 2 && day >= 19) || (m === 3 && day <= 20)) return 'Pisces'
-  if ((m === 3 && day >= 21) || (m === 4 && day <= 19)) return 'Aries'
-  if ((m === 4 && day >= 20) || (m === 5 && day <= 20)) return 'Taurus'
-  if ((m === 5 && day >= 21) || (m === 6 && day <= 20)) return 'Gemini'
-  if ((m === 6 && day >= 21) || (m === 7 && day <= 22)) return 'Cancer'
-  if ((m === 7 && day >= 23) || (m === 8 && day <= 22)) return 'Leo'
-  if ((m === 8 && day >= 23) || (m === 9 && day <= 22)) return 'Virgo'
-  if ((m === 9 && day >= 23) || (m === 10 && day <= 22)) return 'Libra'
-  if ((m === 10 && day >= 23) || (m === 11 && day <= 21)) return 'Scorpio'
-  if ((m === 11 && day >= 22) || (m === 12 && day <= 21)) return 'Sagittarius'
-  return 'Capricorn'
-}
-
-export function getZodiacEmoji(sign: string): string {
-  const map: Record<string, string> = {
-    Aries: '\u2648', Taurus: '\u2649', Gemini: '\u264A', Cancer: '\u264B',
-    Leo: '\u264C', Virgo: '\u264D', Libra: '\u264E', Scorpio: '\u264F',
-    Sagittarius: '\u2650', Capricorn: '\u2651', Aquarius: '\u2652', Pisces: '\u2653',
-  }
-  return map[sign] || '\u2B50'
-}
-
-export function getAge(dob: string): number {
-  const birth = new Date(dob)
-  const now = new Date()
-  let age = now.getFullYear() - birth.getFullYear()
-  const m = now.getMonth() - birth.getMonth()
-  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
-  return age
-}
-
-// ─── Edit Lock Helpers ─────────────────────────────────────────────
-
-export function isMonthlyEditUnlocked(): boolean {
-  return new Date().getDate() === 1
-}
-
-// ─── DB Types ────────────────────────────────────────────────────────
-
-export interface DbUser {
-  id: number
-  name: string
-  photo_url: string | null
-  height: number
-  weight: number
-  lat: number
-  lng: number
-  tg_username: string | null
-  is_online: boolean
-  updated_at: string
-  
-  // HKMOD fields
-  position: number | null
-  is_side: boolean | null
-  preference1: string | null  // Safe | Raw
-  preference2: string | null  // Clean | Party | Party✓
-  preference3: string | null  // 1on1 | Group
-  preference4: string | null  // Host | Travel | Outdoor | Sauna
-  open_to_messages: boolean | null
-  
-  // LMN fields
-  dob: string | null
-  gender: string | null       // Male | Female
-  seeking_gender: string | null // Men | Women
-  seeking_today: string | null // Just Browsing | Chat | Meetup | Webcam
-  meetup_type: string | null   // Coffee | Meals | Outdoor | Charity | Bar & Parties | Bed
-  
-  // Shared premium fields
-  invisible_until: string | null
-  invisible_purchased_at: string | null
-  hide_age_until: string | null
-  hide_age_purchased_at: string | null
-  grid_rows_unlocked: number | null
-  filters_unlocked: boolean | null
-  filters_unlocked_expires_at: string | null
-}
-
-export interface Raffle {
-  id: number
-  prize_type: 'filters' | 'invisible'
-  status: 'pending' | 'active' | 'completed'
-  target_tickets: number
-  current_tickets: number
-  winner_id: number | null
-  winner_name: string | null
-  winner_notified: boolean | null
-  countdown_started_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-// ─── Distance ────────────────────────────────────────────────────────
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLng = (lng2 - lng1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-// ─── Core CRUD ───────────────────────────────────────────────────────
-
-export async function upsertUser(user: Partial<DbUser>): Promise<DbUser | null> {
-  if (!hasValidKey) return null
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?on_conflict=id`, {
-      method: 'POST',
-      headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify(user),
+  async function request(table: string, method: string = 'GET', body: any = null, query: string = '') {
+    const res = await fetch(`${url}/rest/v1/${table}${query}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
     })
-    const text = await res.text()
-    if (!res.ok) throw new Error(text)
-    const data = JSON.parse(text)
-    return Array.isArray(data) && data.length > 0 ? data[0] : null
-  } catch (err) {
-    console.error('upsertUser error:', String(err).substring(0, 200))
-    return null
-  }
-}
-
-export async function fetchNearby(lat: number, lng: number, limit = 100): Promise<DbUser[]> {
-  if (!hasValidKey) return []
-  try {
-    const cols = Object.keys({} as DbUser).join(',')
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?select=${cols}&limit=200`, { headers })
     if (!res.ok) {
-      const err = await res.text()
-      console.error(`fetchNearby failed: ${res.status} ${err.substring(0, 200)}`)
-      return []
+      const txt = await res.text()
+      throw new Error(`Supabase ${method} ${table} ${res.status}: ${txt.slice(0, 200)}`)
     }
-    const data = (await res.json()) as DbUser[]
-    return data
-      .filter(u => u.lat && u.lng)
-      .map(u => ({ user: u, dist: haversineKm(lat, lng, u.lat, u.lng) }))
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, limit)
-      .map(d => d.user)
-  } catch (err) {
-    console.error('fetchNearby error:', err)
-    return []
+    if (res.status === 204) return null
+    return res.json()
   }
-}
 
-export async function setOnlineStatus(userId: number, isOnline: boolean): Promise<void> {
-  if (!hasValidKey) return
-  try {
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({ is_online: isOnline, updated_at: new Date().toISOString() }),
-    })
-  } catch (err) {
-    console.error('setOnlineStatus error:', err)
+  return {
+    // ── Users ─────────────────────────────────────────────────
+    async upsertUser(user: Partial<DbUser> & { id: number }): Promise<DbUser> {
+      const existing = await request('users', 'GET', null, `?id=eq.${user.id}&limit=1`)
+      if (existing?.[0]) {
+        return request('users', 'PATCH', user, `?id=eq.${user.id}`)?.[0]
+      }
+      return request('users', 'POST', { ...user, created_at: new Date().toISOString() })?.[0]
+    },
+
+    async fetchUser(userId: number): Promise<DbUser | null> {
+      const res = await request('users', 'GET', null, `?id=eq.${userId}&limit=1`)
+      return res?.[0] || null
+    },
+
+    async fetchNearby(lat: number, lng: number, radiusKm: number = 50, limit: number = 100): Promise<DbUser[]> {
+      // Use PostgREST approximate box query for performance
+      const latDelta = radiusKm / 111
+      const lngDelta = radiusKm / (111 * Math.cos(lat * Math.PI / 180))
+      const query = `?latitude=gte.${lat - latDelta}&latitude=lte.${lat + latDelta}&longitude=gte.${lng - lngDelta}&longitude=lte.${lng + lngDelta}&limit=${limit}`
+      return request('users', 'GET', null, query) || []
+    },
+
+    async setOnlineStatus(userId: number, online: boolean): Promise<void> {
+      await request('users', 'PATCH', { online, last_seen: new Date().toISOString() }, `?id=eq.${userId}`)
+    },
+
+    // ── Raffles ───────────────────────────────────────────────
+    async getActiveRaffle(): Promise<Raffle | null> {
+      const res = await request('raffles', 'GET', null, '?status=eq.active&limit=1&order=created_at.desc')
+      return res?.[0] || null
+    },
+
+    async buyRaffleTicket(userId: number, userName: string, raffleId: string): Promise<boolean> {
+      try {
+        await request('raffle_tickets', 'POST', {
+          raffle_id: raffleId,
+          user_id: userId,
+          user_name: userName,
+          purchased_at: new Date().toISOString(),
+        })
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    async createRaffle(prizeType: string, targetTickets: number = 20): Promise<Raffle> {
+      return request('raffles', 'POST', {
+        prize_type: prizeType,
+        status: 'active',
+        target_tickets: targetTickets,
+        current_tickets: 0,
+        created_at: new Date().toISOString(),
+      })
+    },
+
+    async drawRaffleWinner(raffleId: string): Promise<{ userId: number; userName: string } | null> {
+      const tickets = await request('raffle_tickets', 'GET', null, `?raffle_id=eq.${raffleId}`)
+      if (!tickets?.length) return null
+      const winner = tickets[Math.floor(Math.random() * tickets.length)]
+      await request('raffles', 'PATCH', {
+        status: 'completed',
+        winner_id: winner.user_id,
+        winner_name: winner.user_name,
+        winner_notified: true,
+      }, `?id=eq.${raffleId}`)
+      return { userId: winner.user_id, userName: winner.user_name }
+    },
+
+    async setRaffleDrawToNextWednesday(raffleId: string): Promise<void> {
+      const now = new Date()
+      const nextWed = new Date(now)
+      nextWed.setDate(now.getDate() + ((3 - now.getDay() + 7) % 7 || 7))
+      nextWed.setHours(20, 0, 0, 0)
+      await request('raffles', 'PATCH', { draw_date: nextWed.toISOString() }, `?id=eq.${raffleId}`)
+    },
+
+    // ── Flying Messages ───────────────────────────────────────
+    async insertFlyingMessage(fromId: number, fromName: string, toId: number, content: string): Promise<FlyingMessage> {
+      return request('flying_messages', 'POST', {
+        from_user_id: fromId,
+        from_user_name: fromName,
+        to_user_id: toId,
+        content,
+        created_at: new Date().toISOString(),
+      })
+    },
+
+    async fetchFlyingMessages(userId: number, since?: string): Promise<FlyingMessage[]> {
+      const query = since
+        ? `?to_user_id=eq.${userId}&created_at=gt.${since}&order=created_at.desc&limit=50`
+        : `?to_user_id=eq.${userId}&order=created_at.desc&limit=50`
+      return request('flying_messages', 'GET', null, query) || []
+    },
+
+    // ── Unlock Status ─────────────────────────────────────────
+    async fetchUserUnlockStatus(userId: number): Promise<{
+      grid_rows_unlocked: number
+      filters_unlocked: boolean
+      filters_unlocked_expires_at: string | null
+      invisible_until: string | null
+      channel_follow_unlock: boolean
+    }> {
+      const res = await request('users', 'GET', null, `?id=eq.${userId}&select=grid_rows_unlocked,filters_unlocked,filters_unlocked_expires_at,invisible_until,channel_follow_unlock&limit=1`)
+      const user = res?.[0]
+      return {
+        grid_rows_unlocked: user?.grid_rows_unlocked || 2,
+        filters_unlocked: user?.filters_unlocked || false,
+        filters_unlocked_expires_at: user?.filters_unlocked_expires_at || null,
+        invisible_until: user?.invisible_until || null,
+        channel_follow_unlock: user?.channel_follow_unlock || false,
+      }
+    },
+
+    async ensureFilterUnlock(userId: number): Promise<boolean> {
+      const status = await this.fetchUserUnlockStatus(userId)
+      if (!status.filters_unlocked) return false
+      if (status.filters_unlocked_expires_at && new Date(status.filters_unlocked_expires_at) < new Date()) {
+        // Expired - reset
+        await request('users', 'PATCH', {
+          filters_unlocked: false,
+          filters_unlocked_expires_at: null,
+        }, `?id=eq.${userId}`)
+        return false
+      }
+      return true
+    },
   }
-}
-
-export async function fetchUserUnlockStatus(userId: number): Promise<{
-  grid_rows_unlocked: number
-  filters_unlocked: boolean
-  invisible_until: string | null
-} | null> {
-  if (!hasValidKey) return null
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=grid_rows_unlocked,filters_unlocked,invisible_until`, { headers })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.[0] || null
-  } catch {
-    return null
-  }
-}
-
-// ─── Flying Messages ───────────────────────────────────────────────────
-
-export interface FlyingMessage {
-  id: number
-  user_id: number
-  user_name: string
-  text: string
-  created_at: string
-}
-
-export async function insertFlyingMessage(userId: number, userName: string, text: string): Promise<boolean> {
-  if (!hasValidKey) return false
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/flying_messages`, {
-      method: 'POST',
-      headers: { ...headers, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ user_id: userId, user_name: userName, text }),
-    })
-    return res.ok
-  } catch { return false }
-}
-
-export async function fetchFlyingMessages(since?: string): Promise<FlyingMessage[]> {
-  if (!hasValidKey) return []
-  try {
-    let url = `${SUPABASE_URL}/rest/v1/flying_messages?order=created_at.desc&limit=50`
-    if (since) url += `&created_at=gte.${since}`
-    const res = await fetch(url, { headers })
-    if (!res.ok) return []
-    return await res.json()
-  } catch { return [] }
-}
-
-// ─── Travel Directory ────────────────────────────────────────────────
-
-export interface TravelEntry {
-  id: number
-  country: 'Hong Kong' | 'Taiwan' | 'Thailand'
-  name: string
-  cost: string | null
-  address: string | null
-  contact: string | null
-  hours: string | null
-  website: string | null
-  directions: string | null
-  image_url: string | null
-  category: 'sauna' | 'accommodation' | 'callboy'
-}
-
-export async function fetchTravelEntries(country: string, category: string): Promise<TravelEntry[]> {
-  if (!hasValidKey) return []
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/travel_entries?country=eq.${encodeURIComponent(country)}&category=eq.${category}&approved=eq.true&order=name.asc`,
-      { headers }
-    )
-    if (!res.ok) return []
-    return await res.json()
-  } catch { return [] }
-}
-
-// ─── Raffle ────────────────────────────────────────────────────────────
-
-export async function getActiveRaffle(): Promise<Raffle | null> {
-  if (!hasValidKey) return null
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?status=eq.active&limit=1`, { headers })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.[0] || null
-  } catch { return null }
-}
-
-export async function buyRaffleTicket(userId: number, userName: string): Promise<boolean> {
-  if (!hasValidKey) return false
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/buy_raffle_ticket`, {
-      method: 'POST',
-      headers: { ...headers, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ p_user_id: userId, p_user_name: userName }),
-    })
-    return res.ok
-  } catch { return false }
-}
-
-export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<Raffle | null> {
-  if (!hasValidKey) return null
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles`, {
-      method: 'POST',
-      headers: { ...headers, 'Prefer': 'return=representation' },
-      body: JSON.stringify({ prize_type: prizeType, status: 'active', target_tickets: 20, current_tickets: 0 }),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.[0] || null
-  } catch { return null }
-}
-
-export async function drawRaffleWinner(raffleId: number): Promise<Raffle | null> {
-  if (!hasValidKey) return null
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/draw_raffle_winner`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ raffle_id: raffleId }),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.[0] || null
-  } catch { return null }
 }

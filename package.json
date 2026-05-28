@@ -1,0 +1,19 @@
+{
+  "name": "dating-apps",
+  "version": "2.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:lmn": "cd apps/lmn && npm run dev",
+    "dev:hkmod": "cd apps/hkmod && npm run dev",
+    "build:lmn": "cd apps/lmn && npm run build",
+    "build:hkmod": "cd apps/hkmod && npm run build",
+    "build:all": "turbo run build"
+  },
+  "devDependencies": {
+    "turbo": "^2.0"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "dating-core",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./types": "./src/types.ts",
+    "./storage": "./src/storage.ts",
+    "./i18n": "./src/i18n.ts",
+    "./supabase": "./src/supabase.ts",
+    "./payments": "./src/payments.ts"
+  }
+}
