@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.svg'
 import {
@@ -22,7 +22,7 @@ const storage = makeStorage('hkmod')
 // ─── Types ───────────────────────────────────────────────────────────
 
 interface UserProfile {
-  id: string
+  id: number
   name: string
   height: number
   weight: number
@@ -128,7 +128,7 @@ function getFilterColor(mode: RoleFilter): string {
 function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
   const dist = u.lat && u.lng ? getDistance(myLat, myLng, u.lat, u.lng) : 0
   return {
-    id: String(u.id), name: u.name || '', height: u.height || 0, weight: u.weight || 0,
+    id: u.id, name: u.name || '', height: u.height || 0, weight: u.weight || 0,
     position: u.position ?? 0.5, isSide: u.is_side ?? false,
     isOnline: u.is_online ?? false, distance: Math.round(dist),
     lat: u.lat ?? undefined, lng: u.lng ?? undefined,
@@ -395,9 +395,17 @@ function MainScreen({
     return (a.distance || Infinity) - (b.distance || Infinity)
   })
 
+  const matchingIds = new Set(filtered.map(u => u.id))
+  const nonMatching = allUsers.filter(u => !matchingIds.has(u.id)).sort((a, b) => {
+    if (a.isOwn) return -1
+    if (b.isOwn) return 1
+    return (a.distance || Infinity) - (b.distance || Infinity)
+  })
+  const sortedUsers = [...filtered, ...nonMatching]
+
   const maxVisible = gridRowsUnlocked * 5 + 1 // +1 for own profile
-  const visibleUsers = filtered.slice(0, maxVisible)
-  const hasMore = filtered.length > maxVisible
+  const visibleUsers = sortedUsers.slice(0, maxVisible)
+  const hasMore = sortedUsers.length > maxVisible
 
   return (
     <div className="pb-20">
@@ -512,9 +520,28 @@ function MainScreen({
           </div>
         ) : (
           <div className="grid grid-cols-5 gap-1">
-            {visibleUsers.map(u => (
-              <ProfileTile key={u.id} user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
-            ))}
+            {visibleUsers.map((u, idx) => {
+              const isMatching = matchingIds.has(u.id)
+              const isDivider = idx === filtered.length && nonMatching.length > 0
+              return (
+                <React.Fragment key={isDivider ? 'divider' : u.id}>
+                  {isDivider && (
+                    <div className="col-span-5 py-1">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-px bg-[#2C2C2E]" />
+                        <span className="text-[9px] text-[#8E8E93] uppercase tracking-wider">{lang === 'tc' ? '其他用戶' : lang === 'sc' ? '其他用户' : 'Others'}</span>
+                        <div className="flex-1 h-px bg-[#2C2C2E]" />
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    style={!isMatching ? { opacity: 0.3, pointerEvents: 'none' } : undefined}
+                  >
+                    <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
+                  </div>
+                </React.Fragment>
+              )
+            })}
           </div>
         )}
       </div>
@@ -894,7 +921,7 @@ export default function App() {
   const [view, setView] = useState<View>('MAIN')
   const [lang, setLang] = useState<Lang>('en')
   const [ownProfile, setOwnProfile] = useState<UserProfile>({
-    id: '0', name: '', height: 0, weight: 0, position: 0.5, isSide: false,
+    id: 0, name: '', height: 0, weight: 0, position: 0.5, isSide: false,
     isOnline: false, distance: 0, hasPhoto: false, isInvisible: false,
   })
   const [users, setUsers] = useState<UserProfile[]>([])
@@ -928,7 +955,7 @@ export default function App() {
       if (user) {
         tgUserRef.current = { id: user.id, name: user.first_name, photo: user.photo_url, username: user.username }
         setIsAdmin(isAdminUser(user))
-        setOwnProfile(p => ({ ...p, id: String(user.id), name: user.first_name, tgPhotoUrl: user.photo_url, tgUsername: user.username }))
+        setOwnProfile(p => ({ ...p, id: user.id, name: user.first_name, tgPhotoUrl: user.photo_url, tgUsername: user.username }))
 
         // Load unlock status from DB
         fetchUserUnlockStatus(user.id).then(status => {
