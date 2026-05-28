@@ -2,17 +2,17 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import lmnLogo from './assets/lmn-logo.svg'
 import lmnLogoAnim from './assets/lmn-logo-animated.mp4'
-import { t, tZodiac, type Lang, getLangLabel } from '../lib/i18n'
 import {
   MapPin, X, MessageCircle, LocateFixed, RefreshCw,
   Eye, EyeOff, ArrowLeft, Lock, Gift,
 } from 'lucide-react'
+import { t, tZodiac, type Lang, getLangLabel } from 'dating-core/i18n'
 import {
   upsertUser, fetchNearby, setOnlineStatus, fetchUserUnlockStatus,
   getActiveRaffle, buyRaffleTicket, createRaffle, drawRaffleWinner, setRaffleDrawToNextWednesday,
   getZodiac, getZodiacEmoji, getAge, ensureFilterUnlock, type DbUser, type Raffle,
-} from '../lib/supabase'
-import { getTg, getUserId, makeStorage } from '../lib/storage'
+} from 'dating-core/supabase'
+import { getTg, getUserId, makeStorage } from 'dating-core/storage'
 
 const storage = makeStorage('lmn')
 

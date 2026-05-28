@@ -1,20 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.svg'
-import { t, tPref, tRole, type Lang, getLangLabel } from '../lib/i18n'
 import {
   Grid3X3, Users, ArrowLeft, Check, MapPin, X, MessageCircle,
   LocateFixed, AlertTriangle, Lock, Gift, Wallet, RefreshCw,
   Eye, EyeOff,
 } from 'lucide-react'
+import { t, tPref, tRole, type Lang, getLangLabel } from 'dating-core/i18n'
 import {
   upsertUser, fetchNearby, setOnlineStatus, fetchUserUnlockStatus,
   getActiveRaffle, buyRaffleTicket, createRaffle, drawRaffleWinner,
   insertFlyingMessage, fetchFlyingMessages,
   fetchTravelEntries,
   type DbUser, type Raffle, type FlyingMessage, type TravelEntry,
-} from '../lib/supabase'
-import { getTg, getUserId, isInTelegram, makeStorage } from '../lib/storage'
+} from 'dating-core/supabase'
+import { getTg, getUserId, isInTelegram, makeStorage } from 'dating-core/storage'
 
 const storage = makeStorage('hkmod')
 
