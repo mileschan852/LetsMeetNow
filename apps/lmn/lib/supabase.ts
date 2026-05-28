@@ -329,3 +329,27 @@ export async function setRaffleDrawToNextWednesday(raffleId: number): Promise<bo
   }
 }
 
+// Auto 7-day filter unlock for new users (only if not already set)
+export async function ensureFilterUnlock(userId: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=filters_unlocked_expires_at`, { headers })
+    if (!res.ok) return false
+    const data = await res.json()
+    if (!data || data.length === 0) return false
+    const current = data[0]?.filters_unlocked_expires_at
+    if (current) return true // already has unlock, nothing to do
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ filters_unlocked_expires_at: expiresAt }),
+    })
+    return patchRes.ok
+  } catch (err) {
+    console.error('ensureFilterUnlock failed:', err)
+    return false
+  }
+}
+
