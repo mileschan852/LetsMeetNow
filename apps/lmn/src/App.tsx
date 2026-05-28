@@ -4,7 +4,7 @@ import lmnLogo from './assets/lmn-logo.svg'
 import lmnLogoAnim from './assets/lmn-logo-animated.mp4'
 import {
   MapPin, X, MessageCircle, LocateFixed, RefreshCw,
-  Eye, EyeOff, ArrowLeft, Lock, Gift,
+  Eye, EyeOff, ArrowLeft, Lock, Gift, Unlock,
 } from 'lucide-react'
 import { t, tZodiac, type Lang, getLangLabel } from 'dating-core/i18n'
 import {
@@ -13,6 +13,7 @@ import {
   getZodiac, getZodiacEmoji, getAge, ensureFilterUnlock, type DbUser, type Raffle,
 } from 'dating-core/supabase'
 import { getTg, getUserId, makeStorage } from 'dating-core/storage'
+import { requestPayment } from 'dating-core/payments'
 
 const storage = makeStorage('lmn')
 
@@ -452,6 +453,7 @@ function MainScreen({
   ownProfile, users, onViewOwn, onViewPhoto, isLoading, lang, setLang,
   onRefresh, isAdmin, filtersUnlocked, onUnlockFilters, onToggleInvisible,
   gridRows, channelFollowUnlock, onClaimChannelFollow, isInvisible, invisiblePurchased, raffle, onBuyTicket, onStartNext,
+  profileUnlocked, onUnlockProfile,
 }: {
   ownProfile: UserProfile; users: UserProfile[]; onViewOwn: () => void;
   onViewPhoto: (u: UserProfile) => void; isLoading: boolean; lang: Lang; setLang: (l: Lang) => void;
@@ -459,6 +461,7 @@ function MainScreen({
   onUnlockFilters: () => void; onToggleInvisible: () => void;
   gridRows: number; channelFollowUnlock: number; onClaimChannelFollow: () => void; isInvisible: boolean; invisiblePurchased: boolean;
   raffle: Raffle | null; onBuyTicket: () => void; onStartNext: () => void;
+  profileUnlocked: boolean; onUnlockProfile: () => void;
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
   const [photoOnly, setPhotoOnly] = useState(false)
@@ -572,18 +575,25 @@ function MainScreen({
           <RaffleButton raffle={raffle} isAdmin={isAdmin} onBuy={onBuyTicket} onStartNext={onStartNext} lang={lang} />
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={cycleLang} className="text-[10px] font-bold text-[#FF6B35] px-2 py-1 rounded-full bg-[#FF6B35]/10 border border-[#FF6B35]/30 nav-press">
+            {getLangLabel(lang)}
+          </button>
+          <button onClick={onRefresh} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press">
+            <RefreshCw className="w-3.5 h-3.5 text-[#8E8E93]" />
+          </button>
+          {!profileUnlocked && (
+            <button onClick={onUnlockProfile}
+              className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#FF6B35]/30 flex items-center justify-center nav-press"
+              title="Unlock Profile (100 ⭐)">
+              <Unlock className="w-3.5 h-3.5 text-[#FF6B35]" />
+            </button>
+          )}
           <button onClick={onToggleInvisible}
             className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
               isInvisible ? 'bg-purple-500/30 text-purple-400 border-purple-500/40' :
               invisiblePurchased ? 'bg-purple-500/10 text-purple-500/60 border-purple-500/20' :
               'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
             }`} title="Invisible Mode">👁️‍🗨️</button>
-          <button onClick={onRefresh} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press">
-            <RefreshCw className="w-3.5 h-3.5 text-[#8E8E93]" />
-          </button>
-          <button onClick={cycleLang} className="text-[10px] font-bold text-[#FF6B35] px-2 py-1 rounded-full bg-[#FF6B35]/10 border border-[#FF6B35]/30 nav-press">
-            {getLangLabel(lang)}
-          </button>
         </div>
       </div>
 
@@ -696,9 +706,10 @@ function MainScreen({
 
 // ─── Own Profile Screen ──────────────────────────────────────────────
 
-function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible, onToggleInvisible }: {
+function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible, onToggleInvisible, profileUnlocked }: {
   profile: UserProfile; onSave: (p: any) => void; onBack: () => void;
   lang: Lang; isAdmin: boolean; isInvisible: boolean; onToggleInvisible: () => void;
+  profileUnlocked: boolean;
 }) {
   const [height, setHeight] = useState(String(profile.height || ''))
   const [weight, setWeight] = useState(String(profile.weight || ''))
@@ -710,7 +721,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible,
   const zodiac = profile.dob ? getZodiac(profile.dob) : ''
   const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
   const age = profile.dob ? getAge(profile.dob) : '?'
-  const canEdit = !profile.height || new Date().getDate() === 1 || isAdmin
+  const canEdit = !profile.height || new Date().getDate() === 1 || isAdmin || profileUnlocked
 
   const changed = () => setHasChanges(true)
 
@@ -860,6 +871,7 @@ export default function App() {
   const [isInvisible, setIsInvisible] = useState(false)
   const [invisiblePurchased, setInvisiblePurchased] = useState(false)
   const [raffle, setRaffle] = useState<Raffle | null>(null)
+  const [profileUnlocked, setProfileUnlocked] = useState(false)
 
   const tgUserRef = useRef<any>(null)
 
@@ -881,6 +893,7 @@ export default function App() {
           if (status) {
             setGridRows(status.grid_rows_unlocked || 2)
             setFiltersUnlocked(!!status.filters_unlocked)
+            setProfileUnlocked(!!status.profile_unlocked)
             if (status.invisible_until) {
               const active = new Date(status.invisible_until).getTime() > Date.now()
               setIsInvisible(active)
@@ -1098,7 +1111,35 @@ export default function App() {
     storage.set('channelFollowed', '1')
   }, [channelFollowUnlock])
 
-  // ─── Unlock filters (divider button = row unlock) ────────────────
+  // ─── Unlock profile (100 ⭐ one-off) ─────────────────────────────
+  const handleUnlockProfile = useCallback(async () => {
+    const uid = tgUserRef.current?.id
+    if (!uid) return
+
+    if (isAdmin) {
+      await upsertUser({ id: uid, profile_unlocked: true })
+      setProfileUnlocked(true)
+      return
+    }
+
+    try {
+      const tg = getTg() as any
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid, amount: 100, purpose: 'profile' }),
+      })
+      const data = await res.json()
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status: string) => {
+          if (status === 'paid') {
+            await upsertUser({ id: uid, profile_unlocked: true })
+            setProfileUnlocked(true)
+          }
+        })
+      }
+    } catch (e) { console.error('Profile unlock failed:', e) }
+  }, [isAdmin])
   const handleUnlockFilters = useCallback(async () => {
     const uid = tgUserRef.current?.id
     if (!uid) return
@@ -1287,6 +1328,7 @@ export default function App() {
           isInvisible={isInvisible}
           invisiblePurchased={invisiblePurchased}
           raffle={raffle} onBuyTicket={handleBuyTicket} onStartNext={handleStartNextRaffle}
+          profileUnlocked={profileUnlocked} onUnlockProfile={handleUnlockProfile}
         />
       )}
       {view === 'OWN_PROFILE' && (
@@ -1294,6 +1336,7 @@ export default function App() {
           profile={ownProfile} onSave={handleSaveProfile} onBack={() => setView('MAIN')}
           lang={lang} isAdmin={isAdmin} isInvisible={isInvisible}
           onToggleInvisible={handleToggleInvisible}
+          profileUnlocked={profileUnlocked}
         />
       )}
       {selectedPhoto && (

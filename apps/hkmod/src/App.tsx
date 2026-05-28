@@ -4,7 +4,7 @@ import logoImg from './assets/hkmod-logo.svg'
 import {
   Grid3X3, Users, ArrowLeft, Check, MapPin, X, MessageCircle,
   LocateFixed, AlertTriangle, Lock, Gift, Wallet, RefreshCw,
-  Eye, EyeOff,
+  Eye, EyeOff, Unlock,
 } from 'lucide-react'
 import { t, tPref, tRole, type Lang, getLangLabel } from 'dating-core/i18n'
 import {
@@ -15,6 +15,7 @@ import {
   type DbUser, type Raffle, type FlyingMessage, type TravelEntry,
 } from 'dating-core/supabase'
 import { getTg, getUserId, isInTelegram, makeStorage } from 'dating-core/storage'
+import { requestPayment } from 'dating-core/payments'
 
 const storage = makeStorage('hkmod')
 
@@ -319,6 +320,7 @@ function MainScreen({
   ownProfile, users, onViewOwn, onViewPhoto, isLoading, lang, setLang,
   onRefresh, isAdmin, filtersUnlocked, onUnlockFilters, onToggleInvisible,
   gridRowsUnlocked, isInvisible, invisiblePurchased, raffle, onBuyTicket, onSetPrize, onOpenTravel,
+  profileUnlocked, onUnlockProfile,
 }: {
   ownProfile: UserProfile; users: UserProfile[]; onViewOwn: () => void;
   onViewPhoto: (u: UserProfile) => void; isLoading: boolean; lang: Lang; setLang: (l: Lang) => void;
@@ -326,6 +328,7 @@ function MainScreen({
   onUnlockFilters: () => void; onToggleInvisible: () => void;
   gridRowsUnlocked: number; isInvisible: boolean; invisiblePurchased: boolean;
   raffle: Raffle | null; onBuyTicket: () => void; onSetPrize: (p: 'filters' | 'invisible') => void; onOpenTravel: () => void;
+  profileUnlocked: boolean; onUnlockProfile: () => void;
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
   const [pref1, setPref1] = useState<'Safe' | 'Raw'>(ownProfile.preference1 || 'Safe')
@@ -407,19 +410,26 @@ function MainScreen({
           <RaffleButton raffle={raffle} isAdmin={isAdmin} onBuy={onBuyTicket} onSetPrize={onSetPrize} lang={lang} />
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={cycleLang} className="text-[10px] font-bold text-[#FF6B35] px-2 py-1 rounded-full bg-[#FF6B35]/10 border border-[#FF6B35]/30 nav-press">
+            {getLangLabel(lang)}
+          </button>
+          <button onClick={onRefresh} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press">
+            <RefreshCw className="w-3.5 h-3.5 text-[#8E8E93]" />
+          </button>
+          {!profileUnlocked && (
+            <button onClick={onUnlockProfile}
+              className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#FF6B35]/30 flex items-center justify-center nav-press"
+              title="Unlock Profile (100 ⭐)">
+              <Unlock className="w-3.5 h-3.5 text-[#FF6B35]" />
+            </button>
+          )}
+          <button onClick={onOpenTravel} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press" title="Travel Guide">🌏</button>
           <button onClick={onToggleInvisible}
             className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
               isInvisible ? 'bg-purple-500/30 text-purple-400 border-purple-500/40' :
               invisiblePurchased ? 'bg-purple-500/10 text-purple-500/60 border-purple-500/20' :
               'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
             }`} title="Invisible Mode">👁️‍🗨️</button>
-          <button onClick={onOpenTravel} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press" title="Travel Guide">🌏</button>
-          <button onClick={onRefresh} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press">
-            <RefreshCw className="w-3.5 h-3.5 text-[#8E8E93]" />
-          </button>
-          <button onClick={cycleLang} className="text-[10px] font-bold text-[#FF6B35] px-2 py-1 rounded-full bg-[#FF6B35]/10 border border-[#FF6B35]/30 nav-press">
-            {getLangLabel(lang)}
-          </button>
         </div>
       </div>
 
@@ -530,9 +540,10 @@ function MainScreen({
 
 // ─── Own Profile Screen ──────────────────────────────────────────────
 
-function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible, onToggleInvisible }: {
+function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible, onToggleInvisible, profileUnlocked }: {
   profile: UserProfile; onSave: (p: Partial<UserProfile>) => void; onBack: () => void;
   lang: Lang; isAdmin: boolean; isInvisible: boolean; onToggleInvisible: () => void;
+  profileUnlocked: boolean;
 }) {
   const [height, setHeight] = useState(String(profile.height || ''))
   const [weight, setWeight] = useState(String(profile.weight || ''))
@@ -546,7 +557,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible,
   const [errors, setErrors] = useState<string[]>([])
   const [hasChanges, setHasChanges] = useState(false)
 
-  const canEdit = !profile.height || new Date().getDate() === 1 || isAdmin
+  const canEdit = !profile.height || new Date().getDate() === 1 || isAdmin || profileUnlocked
 
   const changed = () => setHasChanges(true)
 
@@ -899,6 +910,9 @@ export default function App() {
   const [invisiblePurchased, setInvisiblePurchased] = useState(false)
   const [invisibleUntil, setInvisibleUntil] = useState<string | null>(null)
 
+  // Profile unlock
+  const [profileUnlocked, setProfileUnlocked] = useState(false)
+
   // Raffle
   const [raffle, setRaffle] = useState<Raffle | null>(null)
 
@@ -921,6 +935,7 @@ export default function App() {
           if (status) {
             setGridRows(status.grid_rows_unlocked || 2)
             setFiltersUnlocked(!!status.filters_unlocked)
+            setProfileUnlocked(!!status.profile_unlocked)
             if (status.invisible_until) {
               const active = new Date(status.invisible_until).getTime() > Date.now()
               setIsInvisible(active)
@@ -1025,6 +1040,36 @@ export default function App() {
     })
   }, [isInvisible, invisiblePurchased, isAdmin])
 
+  // ─── Unlock profile (100 ⭐ one-off) ────────────────────────────────
+  const handleUnlockProfile = useCallback(async () => {
+    const uid = tgUserRef.current?.id
+    if (!uid) return
+
+    if (isAdmin) {
+      await upsertUser({ id: uid, profile_unlocked: true })
+      setProfileUnlocked(true)
+      return
+    }
+
+    try {
+      const tg = getTg() as any
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid, amount: 100, purpose: 'profile' }),
+      })
+      const data = await res.json()
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status: string) => {
+          if (status === 'paid') {
+            await upsertUser({ id: uid, profile_unlocked: true })
+            setProfileUnlocked(true)
+          }
+        })
+      }
+    } catch (e) { console.error('Profile unlock failed:', e) }
+  }, [isAdmin])
+
   // ─── Unlock filters ──────────────────────────────────────────────
   const handleUnlockFilters = useCallback(() => {
     // TODO: trigger Stars payment
@@ -1064,6 +1109,7 @@ export default function App() {
           invisiblePurchased={invisiblePurchased}
           raffle={raffle} onBuyTicket={handleBuyTicket} onSetPrize={handleSetPrize}
           onOpenTravel={() => setView('TRAVEL')}
+          profileUnlocked={profileUnlocked} onUnlockProfile={handleUnlockProfile}
         />
       )}
       {view === 'OWN_PROFILE' && (
@@ -1071,6 +1117,7 @@ export default function App() {
           profile={ownProfile} onSave={handleSaveProfile} onBack={() => setView('MAIN')}
           lang={lang} isAdmin={isAdmin} isInvisible={isInvisible}
           onToggleInvisible={handleToggleInvisible}
+          profileUnlocked={profileUnlocked}
         />
       )}
       {view === 'TRAVEL' && (
