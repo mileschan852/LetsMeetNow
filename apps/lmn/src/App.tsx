@@ -679,7 +679,7 @@ function MainScreen({
             {(() => {
               // Row-based divider: all users in unlocked rows = normal, beyond = greyed out
               const rowSize = 5
-              const unlockedSlots = (gridRows + channelFollowUnlock) * rowSize + 1 // +1 for own profile
+              const unlockedSlots = (gridRows + channelFollowUnlock) * rowSize // no +1 — own profile already in list
               const visibleUsers = sortedUsers.slice(0, maxVisible)
               const showDivider = visibleUsers.length > unlockedSlots
               return visibleUsers.map((u, idx) => {
@@ -883,7 +883,7 @@ export default function App() {
 
   // Premium
   const [filtersUnlocked, setFiltersUnlocked] = useState(false)
-  const [gridRows, setGridRows] = useState(1)
+  const [gridRows, setGridRows] = useState(2)
   const [channelFollowUnlock, setChannelFollowUnlock] = useState(0)
   const [isInvisible, setIsInvisible] = useState(false)
   const [invisiblePurchased, setInvisiblePurchased] = useState(false)
@@ -908,7 +908,7 @@ export default function App() {
         // Check if profile exists in DB
         fetchUserUnlockStatus(user.id).then(status => {
           if (status) {
-            setGridRows(status.grid_rows_unlocked || 1)
+            setGridRows(status.grid_rows_unlocked || 2)
             setFiltersUnlocked(!!status.filters_unlocked)
             setProfileUnlocked(!!status.profile_unlocked)
             if (status.invisible_until) {
