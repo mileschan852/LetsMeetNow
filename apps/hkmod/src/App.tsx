@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
 import logoAnim from './assets/hkmod-logo-animated.mp4'
@@ -19,7 +19,7 @@ import {
   RefreshCw,
   Send,
 } from 'lucide-react'
-import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, type DbUser, type Raffle } from './lib/supabase'
+import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, type DbUser, type Raffle } from './lib/supabase'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -575,7 +575,7 @@ function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock
 
 // ─── Profile Grid Tile ───────────────────────────────────────────────
 
-function ProfileTile({ user, onClick }: { user: UserProfile; onClick: () => void }) {
+function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => void }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
   const photo = user.tgPhotoUrl
@@ -722,11 +722,12 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   const patchedOwnProfile = { ...ownProfile, isOwn: true, isInvisible: isInvisible || false }
   const allGridUsers: UserProfile[] = [patchedOwnProfile, ...users.filter(u => u.id !== ownProfile.id)]
   
-  const filteredGrid = allGridUsers.filter((u) => {
+  // Invisible users: completely hidden from non-admins (not even greyed out)
+  const visibleGridUsers = isAdmin ? allGridUsers : allGridUsers.filter(u => u.isOwn || !u.isInvisible)
+  
+  const filteredGrid = visibleGridUsers.filter((u) => {
     if (u.isOwn) return true
     if (onlineOnly && !isRecentlyActive(u)) return false
-    // Invisible users: hidden from non-admins (admin sees all with eye icon)
-    if (!isAdmin && u.isInvisible) return false
     // Test users: hidden by default, admin can show
     // When shown, test users go through SAME filters as real users
     if (u.tgUsername === '_test_') {
@@ -796,7 +797,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
   // New: matching users first, then fill remaining slots with closest non-matching (greyed out)
   const matchingIds = new Set(filteredGrid.map(u => u.id))
-  const nonMatchingGrid = allGridUsers.filter(u => !matchingIds.has(u.id)).sort((a, b) => {
+  const nonMatchingGrid = visibleGridUsers.filter(u => !matchingIds.has(u.id)).sort((a, b) => {
     if (a.isOwn) return -1
     if (b.isOwn) return 1
     return (a.distance || Infinity) - (b.distance || Infinity)
@@ -897,7 +898,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
-        <span className="ml-1 text-[#5AC8FA]">v10</span>
+        <span className="ml-1 text-[#5AC8FA]">v15</span>
       </div>
 
       {showDbWarning && (
@@ -1004,71 +1005,105 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
 {(() => {
           const effectiveRows = gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
-          const displayCount = 10 + effectiveRows * 5 // 2 rows default + premium + unlocks
-          const totalVisible = sortedUsers.length
-          const hasMoreUsers = totalVisible > displayCount
-          const visibleUsers = sortedUsers.slice(0, displayCount)
+          const unlockedSlots = effectiveRows * 5
+          const totalRealUsers = sortedUsers.length
+          const hasMoreUsers = totalRealUsers > unlockedSlots
+          
+          // Show all real users + pad to 100 with blanks
+          const displayUsers = [...sortedUsers]
+          while (displayUsers.length < 100) {
+            displayUsers.push({ id: `blank_${displayUsers.length}`, isBlank: true } as any)
+          }
 
           return (
             <>
-              {/* Main grid — matching users first, then non-matching greyed out */}
+              {/* Main grid — all 100 slots, unlocked rows normal, locked rows greyed */}
               <div className="grid grid-cols-5 gap-1.5">
-                  {visibleUsers.map((user) => {
-                    const isMatching = matchingIds.has(user.id)
+                {displayUsers.map((user, idx) => {
+                  const isAboveDivider = idx < unlockedSlots
+                  const isBlank = !!(user as any).isBlank
+                  const isMatching = !isBlank && matchingIds.has(user.id)
+                  
+                  if (isBlank) {
                     return (
-                      <div key={user.id} style={!isMatching ? { opacity: 0.25, pointerEvents: 'none' } : undefined}>
-                        <ProfileTile user={user} onClick={() => user.isOwn ? onViewOwnProfile() : onViewPhoto(user)} />
+                      <div
+                        key={(user as any).id}
+                        className="relative aspect-square rounded-lg bg-[#2C2C2E]/60 border border-[#3A3A3C]/40 flex items-center justify-center"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        <Users className="w-4 h-4 text-[#48484A]" />
                       </div>
                     )
-                  })}
-                </div>
-                {/* Divider / unlock button when there are more users */}
-                {hasMoreUsers && (
-                  <div className="mt-1 mx-0.5 select-none">
-                    <button
-                      className="w-full bg-gradient-to-r from-[#FF6B35]/20 to-purple-600/20 rounded-lg py-1 px-3 flex items-center justify-center gap-1.5 cursor-pointer border border-[#FF6B35]/30 active:scale-[0.98] active:opacity-80 transition-all"
-                      onClick={onPromptUnlock}
-                    >
-                      <span className="text-[11px] text-white font-semibold">{'\u{1F513}'}</span>
-                      <span className="text-[10px] text-[#FF6B35] font-bold">
-                        {isAdmin ? 'Unlock (Admin)' : '1000 \u2B50'}
-                      </span>
-                      <span className="text-[9px] text-[#8E8E93]">({totalVisible - displayCount} more)</span>
-                    </button>
-                  </div>
-                )}
-                {/* Refresh button when all unlocked */}
-                {!hasMoreUsers && (
-                  <div className="mt-1.5 mx-0.5 select-none">
-                    <button
-                      className={`w-full rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all ${
-                        Date.now() - lastRefreshTime >= 5 * 60 * 1000
-                          ? 'bg-[#1A1A1A] border border-[#5AC8FA] text-[#5AC8FA] cursor-pointer active:scale-[0.98]'
-                          : 'bg-[#1A1A1A]/60 border border-[#2C2C2E] text-[#8E8E93] cursor-not-allowed'
-                      }`}
-                      onClick={() => {
-                        if (Date.now() - lastRefreshTime >= 5 * 60 * 1000) {
-                          setLastRefreshTime(Date.now());
-                          onRefresh();
-                        }
-                      }}
-                      disabled={Date.now() - lastRefreshTime < 5 * 60 * 1000}
-                    >
-                      {Date.now() - lastRefreshTime >= 5 * 60 * 1000 ? (
-                        <>
-                          <RefreshCw className="w-4 h-4" />
-                          <span className="text-[11px] font-medium">{lang === 'tc' ? '刷新' : lang === 'sc' ? '刷新' : 'Refresh'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-[11px]">{'\u{1F551}'}</span>
-                          <span className="text-[11px] font-medium">{(() => { const s = Math.ceil((5 * 60 * 1000 - (Date.now() - lastRefreshTime)) / 1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}` })()}</span>
-                        </>
+                  }
+                  
+                  return (
+                    <React.Fragment key={user.id}>
+              {/* Divider row — tap to unlock +1 row */}
+                      {idx === unlockedSlots && hasMoreUsers && (
+                        <div
+                          className="col-span-full flex items-center justify-center py-2 my-1 cursor-pointer select-none active:opacity-60 transition-opacity rounded-lg bg-gradient-to-r from-[#FF6B35]/10 to-purple-600/10 border border-[#FF6B35]/30"
+                          onClick={onPromptUnlock}
+                        >
+                          <span className="text-[10px] text-[#FF6B35] font-bold mr-2">🔒</span>
+                          <span className="text-[10px] text-[#FF6B35] font-semibold">
+                            {isAdmin ? 'Tap to unlock row (admin)' : 'Tap to unlock — 1000 ⭐'}
+                          </span>
+                          <span className="text-[9px] text-[#8E8E93] ml-2">({totalRealUsers - unlockedSlots} more)</span>
+                          <span className="mx-2 text-[10px] text-[#FF6B35] font-bold">🔒</span>
+                        </div>
                       )}
-                    </button>
-                  </div>
-                )}
-              </>
+                      <div
+                        className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200"
+                        style={{
+                          borderColor: user.id === ownProfile.id ? '#FF6B35' : 'transparent',
+                          opacity: !isAboveDivider ? 0.3 : !isMatching ? 0.25 : 1,
+                          pointerEvents: !isAboveDivider ? 'none' : undefined,
+                        }}
+                      >
+                        <ProfileTile
+                          user={user}
+                          onClick={!isAboveDivider ? undefined : () => user.isOwn ? onViewOwnProfile() : onViewPhoto(user)}
+                        />
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+              </div>
+              
+              {/* Divider acts as unlock button — no separate button needed */}
+              
+              {/* Refresh button when all real users are unlocked */}
+              {!hasMoreUsers && (
+                <div className="mt-1.5 mx-0.5 select-none">
+                  <button
+                    className={`w-full rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all ${
+                      Date.now() - lastRefreshTime >= 5 * 60 * 1000
+                        ? 'bg-[#1A1A1A] border border-[#5AC8FA] text-[#5AC8FA] cursor-pointer active:scale-[0.98]'
+                        : 'bg-[#1A1A1A]/60 border border-[#2C2C2E] text-[#8E8E93] cursor-not-allowed'
+                    }`}
+                    onClick={() => {
+                      if (Date.now() - lastRefreshTime >= 5 * 60 * 1000) {
+                        setLastRefreshTime(Date.now());
+                        onRefresh();
+                      }
+                    }}
+                    disabled={Date.now() - lastRefreshTime < 5 * 60 * 1000}
+                  >
+                    {Date.now() - lastRefreshTime >= 5 * 60 * 1000 ? (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        <span className="text-[11px] font-medium">{lang === 'tc' ? '刷新' : lang === 'sc' ? '刷新' : 'Refresh'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[11px]">{'\u{1F551}'}</span>
+                        <span className="text-[11px] font-medium">{(() => { const s = Math.ceil((5 * 60 * 1000 - (Date.now() - lastRefreshTime)) / 1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}` })()}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </>
           )
         })()}
       </div>
@@ -1911,16 +1946,19 @@ export default function App() {
   }, [raffle?.status, raffle?.ends_at, raffle?.id, raffle?.prize_type])
 
   const promptUnlock = async () => {
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
     // Admin bypass: skip Stars payment, unlock directly
     if (isAdmin) {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
       storageSet(CLOUD.gridRowsUnlocked, String(newRows))
       storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      if (userId) {
+        await saveGridRowsUnlocked(userId, newRows)
+      }
       return
     }
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
     if (!userId) return
     try {
       const ctrl = new AbortController()
@@ -1934,12 +1972,13 @@ export default function App() {
       clearTimeout(timer)
       const data = await res.json()
       if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, (status) => {
+        tg.openInvoice(data.invoice_url, async (status) => {
           if (status === 'paid') {
             const newRows = gridRowsUnlocked + 1
             setGridRowsUnlocked(newRows)
             storageSet(CLOUD.gridRowsUnlocked, String(newRows))
             storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+            await saveGridRowsUnlocked(userId, newRows)
           }
         })
       }

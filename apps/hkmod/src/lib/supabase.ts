@@ -313,6 +313,21 @@ export async function updateUserRealPhoto(userId: number, hasRealPhoto: boolean)
 
 // ─── Update invisible status ─────────────────────────────────────────
 
+export async function setGridRowsUnlocked(userId: number, value: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ grid_rows_unlocked: value }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('setGridRowsUnlocked failed:', err)
+    return false
+  }
+}
+
 export async function updateInvisibleStatus(userId: number, until: string | null): Promise<boolean> {
   if (!hasValidKey) return false
   try {

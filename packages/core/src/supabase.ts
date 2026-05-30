@@ -178,12 +178,16 @@ export async function setOnlineStatus(userId: number, isOnline: boolean): Promis
 export async function fetchUserUnlockStatus(userId: number): Promise<{
   grid_rows_unlocked: number
   filters_unlocked: boolean
+  filters_unlocked_expires_at: string | null
   invisible_until: string | null
-  profile_unlocked: boolean
+  invisible_purchased_at: string | null
+  edit_unlocked: boolean | null
+  edit_unlocked_expires_at: string | null
+  has_real_photo: boolean | null
 } | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=grid_rows_unlocked,filters_unlocked,invisible_until,profile_unlocked`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=grid_rows_unlocked,filters_unlocked,filters_unlocked_expires_at,invisible_until,invisible_purchased_at,edit_unlocked,edit_unlocked_expires_at,has_real_photo`, { headers })
     if (!res.ok) return null
     const data = await res.json()
     return data?.[0] || null
@@ -291,7 +295,290 @@ export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<
   } catch { return null }
 }
 
-export async function drawRaffleWinner(raffleId: number): Promise<{ id: number; name: string } | null> {
+export async function updateInvisibleStatus(userId: number, until: string | null): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ invisible_until: until }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('updateInvisibleStatus failed:', err)
+    return false
+  }
+}
+
+export async function fetchGlobalUnlock(): Promise<number> {
+  if (!hasValidKey) return 0
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/global_unlock?select=unlocked_at&order=unlocked_at.desc&limit=1`, { headers })
+    if (!res.ok) return 0
+    const data = await res.json() as { unlocked_at: string }[]
+    if (data.length === 0) return 0
+    return new Date(data[0].unlocked_at).getTime()
+  } catch (err) {
+    console.error('fetchGlobalUnlock failed:', err)
+    return 0
+  }
+}
+
+export async function startRaffleCountdown(raffleId: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${raffleId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ status: 'countdown', countdown_started_at: new Date().toISOString() }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('startRaffleCountdown failed:', err)
+    return false
+  }
+}
+
+export async function completeRaffle(raffleId: number, winnerUserId: number, winnerName: string): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${raffleId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ status: 'completed', winner_user_id: winnerUserId, winner_name: winnerName }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('completeRaffle failed:', err)
+    return false
+  }
+}
+
+export async function getRaffleTickets(raffleId: number): Promise<number> {
+  if (!hasValidKey) return 0
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffle_tickets?raffle_id=eq.${raffleId}&select=count`, { headers })
+    if (!res.ok) return 0
+    const data = await res.json() as { count: number }[]
+    return data[0]?.count || 0
+  } catch (err) {
+    console.error('getRaffleTickets failed:', err)
+    return 0
+  }
+}
+
+export function checkRealPhoto(photoUrl: string | null | undefined): boolean {
+  if (!photoUrl) return false
+  return !photoUrl.includes('default') && !photoUrl.includes('placeholder')
+}
+
+export async function updateRealPhotoStatus(userId: number, hasRealPhoto: boolean): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ has_real_photo: hasRealPhoto }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('updateRealPhotoStatus failed:', err)
+    return false
+  }
+}
+
+export async function fetchUserPhotoStatus(userId: number): Promise<{ has_real_photo: boolean } | null> {
+  if (!hasValidKey) return null
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=has_real_photo`, { headers })
+    if (!res.ok) return null
+    const data = await res.json() as { has_real_photo: boolean }[]
+    return data[0] || null
+  } catch (err) {
+    console.error('fetchUserPhotoStatus failed:', err)
+    return null
+  }
+}
+
+export async function relockUserFeatures(userId: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ unlock_count: 0, filters_unlocked: false, grid_rows_unlocked: 0 }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('relockUserFeatures failed:', err)
+    return false
+  }
+}
+
+export async function deleteUser(userId: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, { method: 'DELETE', headers })
+    return res.ok
+  } catch (err) {
+    console.error('deleteUser failed:', err)
+    return false
+  }
+}
+
+export async function clearAllUsers(): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?is_admin=eq.false`, { method: 'DELETE', headers })
+    return res.ok
+  } catch (err) {
+    console.error('clearAllUsers failed:', err)
+    return false
+  }
+}
+
+export async function updateUnlockCount(userId: number, delta: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const userRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=unlock_count`, { headers })
+    if (!userRes.ok) return false
+    const data = await userRes.json() as { unlock_count: number }[]
+    const current = data[0]?.unlock_count || 0
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ unlock_count: Math.max(0, current + delta) }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('updateUnlockCount failed:', err)
+    return false
+  }
+}
+
+export async function setUnlockCount(userId: number, value: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ unlock_count: value }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('setUnlockCount failed:', err)
+    return false
+  }
+}
+
+export async function setGlobalUnlock(timestamp: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/global_unlock`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ unlocked_at: new Date(timestamp).toISOString() }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('setGlobalUnlock failed:', err)
+    return false
+  }
+}
+
+export async function updateHideAgeStatus(userId: number, until: string | null): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ hide_age_until: until }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('updateHideAgeStatus failed:', err)
+    return false
+  }
+}
+
+export async function updateUserRealPhoto(userId: number, hasRealPhoto: boolean): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ has_real_photo: hasRealPhoto }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('updateUserRealPhoto failed:', err)
+    return false
+  }
+}
+
+export interface DbTopic {
+  id: number
+  name: string
+  description: string
+  created_at: string
+}
+
+export async function fetchTopics(): Promise<DbTopic[]> {
+  if (!hasValidKey) return []
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/topics?select=*&order=created_at.desc`, { headers })
+    if (!res.ok) return []
+    return await res.json() as DbTopic[]
+  } catch (err) {
+    console.error('fetchTopics failed:', err)
+    return []
+  }
+}
+
+export async function insertFlyingMessage(userId: number, userName: string, text: string): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/flying_messages`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ user_id: userId, username: userName, text, top_percent: Math.random() * 80 + 10 }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('insertFlyingMessage failed:', err)
+    return false
+  }
+}
+
+export async function fetchFlyingMessages(since?: string): Promise<FlyingMessage[]> {
+  if (!hasValidKey) return []
+  try {
+    const sinceParam = since ? `&created_at=gte.${encodeURIComponent(since)}` : ''
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/flying_messages?select=*&order=created_at.desc&limit=50${sinceParam}`, { headers })
+    if (!res.ok) return []
+    return await res.json() as FlyingMessage[]
+  } catch (err) {
+    console.error('fetchFlyingMessages failed:', err)
+    return []
+  }
+}
+
+export async function buyRaffleTicket(raffleId: number, userId: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffle_tickets`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ raffle_id: raffleId, user_id: userId }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('buyRaffleTicket failed:', err)
+    return false
+  }
+}
+
+export async function drawRaffleWinner(raffleId: number): Promise<{ user_id: number; name: string } | null> {
   if (!hasValidKey) return null
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/draw_raffle_winner`, {
@@ -304,6 +591,21 @@ export async function drawRaffleWinner(raffleId: number): Promise<{ id: number; 
     if (!data || !data.id) return null
     return { id: data.id, name: data.name || 'Unknown' }
   } catch { return null }
+}
+
+export async function setGridRowsUnlocked(userId: number, rows: number): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ grid_rows_unlocked: rows }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('setGridRowsUnlocked failed:', err)
+    return false
+  }
 }
 
 export async function setRaffleDrawToNextWednesday(raffleId: number): Promise<boolean> {
