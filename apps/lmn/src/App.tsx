@@ -131,29 +131,29 @@ function isAdminUser(user: { id?: number; username?: string } | null | undefined
 // ─── Storage Keys ────────────────────────────────────────────────────
 
 const CLOUD = {
-  age: 'hk_age',
-  height: 'hk_height',
-  weight: 'hk_weight',
-  position: 'hk_position',
-  isSide: 'hk_isSide',
-  pref1: 'hk_pref1',
-  pref2: 'hk_pref2',
-  pref3: 'hk_pref3',
-  pref4: 'hk_pref4',
-  openMsg: 'hk_open_msg',
-  lat: 'hk_lat',
-  lng: 'hk_lng',
-  photoUrl: 'hk_photo_url',
-  name: 'hk_name',
-  lang: 'hk_lang',
-  prefChangedAt: 'hk_pref_changed_at',
-  prefLockedAt: 'hk_pref_locked_at',
-  filtersUnlocked: 'hk_filters_unlocked',
-  filtersUnlockedAt: 'hk_filters_unlocked_at',
-  gridRowsUnlocked: 'hk_grid_rows_unlocked',
-  gridRowsUnlockedAt: 'hk_grid_rows_unlocked_at',
-  invisibleActive: 'hk_invisible_active',
-  channelFollowed: 'hk_channel_followed',
+  age: 'lmn_age',
+  height: 'lmn_height',
+  weight: 'lmn_weight',
+  position: 'lmn_position',
+  isSide: 'lmn_isSide',
+  pref1: 'lmn_pref1',
+  pref2: 'lmn_pref2',
+  pref3: 'lmn_pref3',
+  pref4: 'lmn_pref4',
+  openMsg: 'lmn_open_msg',
+  lat: 'lmn_lat',
+  lng: 'lmn_lng',
+  photoUrl: 'lmn_photo_url',
+  name: 'lmn_name',
+  lang: 'lmn_lang',
+  prefChangedAt: 'lmn_pref_changed_at',
+  prefLockedAt: 'lmn_pref_locked_at',
+  filtersUnlocked: 'lmn_filters_unlocked',
+  filtersUnlockedAt: 'lmn_filters_unlocked_at',
+  gridRowsUnlocked: 'lmn_grid_rows_unlocked',
+  gridRowsUnlockedAt: 'lmn_grid_rows_unlocked_at',
+  invisibleActive: 'lmn_invisible_active',
+  channelFollowed: 'lmn_channel_followed',
 }
 
 // Telegram CloudStorage
@@ -192,22 +192,22 @@ function userKey(key: string): string {
 
 const lsSet = (key: string, value: string) => {
   const k = userKey(key)
-  try { localStorage.setItem('hkmoc_' + k, value) } catch {}
+  try { localStorage.setItem('lmn_' + k, value) } catch {}
 }
 
 const lsGet = (key: string): string | null => {
   const k = userKey(key)
-  try { return localStorage.getItem('hkmoc_' + k) } catch { return null }
+  try { return localStorage.getItem('lmn_' + k) } catch { return null }
 }
 
 const lsGetAll = (): Record<string, string> => {
   const r: Record<string, string> = {}
   const uid = getUserId()
-  const prefix = uid ? `hkmoc_${uid}_` : 'hkmoc_'
+  const prefix = uid ? `lmn_${uid}_` : 'lmn_'
   try {
     Object.keys(localStorage).forEach(k => {
       if (k.startsWith(prefix)) {
-        const shortKey = uid ? k.replace(`hkmoc_${uid}_`, '') : k.replace('hkmoc_', '')
+        const shortKey = uid ? k.replace(`lmn_${uid}_`, '') : k.replace('lmn_', '')
         r[shortKey] = localStorage.getItem(k) || ''
       }
     })
