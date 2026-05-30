@@ -1181,23 +1181,20 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
       alert(lang === 'tc' ? '請輸入身高和體重' : lang === 'sc' ? '请输入身高和体重' : lang === 'ru' ? 'Введите рост и вес' : 'Please enter height and weight')
       return
     }
-    if (!draft.isSide && (draft.position < 0 || draft.position > 1)) {
-      alert(lang === 'tc' ? '請選擇角色' : lang === 'sc' ? '请选择角色' : lang === 'ru' ? 'Выберите роль' : 'Please select a role')
+    if (!draft.dob) {
+      alert('Please enter date of birth')
       return
     }
 
-    // Saving profile locks ALL lockable fields for 30 days
     const now = Date.now()
     await storageSet(CLOUD.prefLockedAt, String(now))
     setLastSavedAt(now)
     await storageSet(CLOUD.height, String(draft.height))
     await storageSet(CLOUD.weight, String(draft.weight))
-    await storageSet(CLOUD.position, String(draft.position))
-    await storageSet(CLOUD.isSide, String(draft.isSide))
-    await storageSet(CLOUD.pref1, draft.preference1 || 'Safe')
-    await storageSet(CLOUD.pref2, draft.preference2 || 'Clean')
-    await storageSet(CLOUD.pref3, draft.preference3 || '1on1')
-    await storageSet(CLOUD.pref4, draft.preference4 || 'Travel')
+    await storageSet(CLOUD.pref1, draft.gender || 'Male')
+    await storageSet(CLOUD.pref2, draft.seekingGender || 'Women')
+    await storageSet(CLOUD.pref3, draft.seekingToday || 'Just Browsing')
+    await storageSet(CLOUD.pref4, draft.meetupType || 'Not Set')
     await storageSet(CLOUD.openMsg, String(draft.openToMessages || false))
     onSave(draft)
     setSaved(true)
