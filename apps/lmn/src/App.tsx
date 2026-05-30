@@ -503,7 +503,7 @@ function LocationGate({ onGranted, lang }: { onGranted: (lat: number, lng: numbe
 
 function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
   const [idx, setIdx] = useState(0)
-  const tips = {
+  const tips: Record<Lang, string[]> = {
     en: [
       `Base: 2 rows free`,
       isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)`,
