@@ -1,44 +1,60 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
-import lmnLogo from './assets/lmn-logo.svg'
-import lmnLogoAnim from './assets/lmn-logo-animated.mp4'
+import logoImg from './assets/lmn-logo.svg'
+import logoAnim from './assets/lmn-logo-animated.mp4'
+import { t, tPref, type Lang, getLangLabel } from './lib/i18n'
 import {
-  MapPin, X, MessageCircle, LocateFixed, RefreshCw,
-  Eye, EyeOff, ArrowLeft, Lock, Gift, Unlock,
+  Grid3X3,
+  Users,
+  ArrowLeft,
+  Check,
+  MapPin,
+  X,
+  MessageCircle,
+  LocateFixed,
+  AlertTriangle,
+  Lock,
+  Gift,
+  Wallet,
+  RefreshCw,
+  Send,
 } from 'lucide-react'
-import { t, tZodiac, type Lang, getLangLabel } from 'dating-core/i18n'
-import {
-  upsertUser, fetchNearby, setOnlineStatus, fetchUserUnlockStatus,
-  getActiveRaffle, buyRaffleTicket, createRaffle, drawRaffleWinner, setRaffleDrawToNextWednesday,
-  getZodiac, getZodiacEmoji, getAge, ensureFilterUnlock, type DbUser, type Raffle,
-} from 'dating-core/supabase'
-import { getTg, getUserId, makeStorage } from 'dating-core/storage'
-import { requestPayment } from 'dating-core/payments'
-
-const storage = makeStorage('lmn')
+import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, type DbUser, type Raffle } from './lib/supabase'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
 interface UserProfile {
-  id: number
+  id: string
   name: string
-  tgPhotoUrl: string
+  age: number
   height: number
   weight: number
-  lat: number
-  lng: number
-  gender: string          // Male | Female
-  seekingGender: string   // Men | Women
+  gender: string
+  seekingGender: string
   dob: string | null
-  seekingToday: string | null  // Just Browsing | Chat | Meetup | Webcam
-  meetupType: string | null    // Coffee | Meals | Outdoor | Charity | Bar & Parties | Bed
+  seekingToday: string | null
+  meetupType: string | null
+  position: number
+  isSide: boolean
   isOnline: boolean
-  isOwn: boolean
-  updatedAt: string
-  distance?: number
+  distance: number
+  lat?: number
+  lng?: number
+  isOwn?: boolean
+  preference1?: 'Safe' | 'Raw'
+  preference2?: 'Clean' | 'Party' | 'Party✓'
+  preference3?: '1on1' | 'Group'
+  preference4?: 'Host' | 'Travel' | 'Outdoor' | 'Sauna'
+  openToMessages?: boolean
+  tgUsername?: string
+  tgPhotoUrl?: string
+  tgPhotos?: string[]
+  updatedAt?: string
+  hasPhoto: boolean
+  hasRealPhoto?: boolean
+  invisibleUntil?: string
   isInvisible: boolean
-  openToMessages: boolean
-  hideAgeUntil: string | null
+  hideAgeUntil?: string | null
 }
 
 type View = 'MAIN' | 'OWN_PROFILE' | 'AGE_GATE' | 'GENDER_SETUP' | 'DISCLAIMER'
@@ -47,388 +63,496 @@ const ADMIN_IDS = [5202742795, 725368127]
 const ADMIN_USERNAMES = ['mileschan852']
 function isAdminUser(user: any) { return !!user?.id && (ADMIN_IDS.includes(user.id) || ADMIN_USERNAMES.includes(user?.username || '')) }
 
-const ZODIAC_SIGNS = [
-  { name: 'Aries', emoji: '\u2648' }, { name: 'Taurus', emoji: '\u2649' },
-  { name: 'Gemini', emoji: '\u264A' }, { name: 'Cancer', emoji: '\u264B' },
-  { name: 'Leo', emoji: '\u264C' }, { name: 'Virgo', emoji: '\u264D' },
-  { name: 'Libra', emoji: '\u264E' }, { name: 'Scorpio', emoji: '\u264F' },
-  { name: 'Sagittarius', emoji: '\u2650' }, { name: 'Capricorn', emoji: '\u2651' },
-  { name: 'Aquarius', emoji: '\u2652' }, { name: 'Pisces', emoji: '\u2653' },
-]
-
-const GENDERS = ['Male', 'Female']
-const SEEKING_GENDERS = ['Men', 'Women']
-const SEEKING_TODAY_OPTS = ['Just Browsing', 'Chat', 'Meetup', 'Webcam']
-const MEETUP_TYPES = ['Coffee', 'Meals', 'Outdoor', 'Charity', 'Bar & Parties', 'Bed']
-const AGE_FILTERS = ['any', 'older', 'same', 'younger']
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLng = (lng2 - lng1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+interface TgWebApp {
+  ready: () => void
+  expand: () => void
+  setHeaderColor: (color: string) => void
+  openTelegramLink: (url: string) => void
+  openLink: (url: string, options?: { try_instant_view?: boolean }) => void
+  initData: string
+  initDataUnsafe: {
+    user?: {
+      id: number
+      first_name: string
+      last_name?: string
+      username?: string
+      photo_url?: string
+      is_premium?: boolean
+    }
+    chat?: {
+      id: number
+      type: 'private' | 'group' | 'supergroup' | 'channel'
+      title?: string
+      username?: string
+    }
+    chat_type?: 'sender' | 'private' | 'group' | 'supergroup' | 'channel'
+    chat_instance?: string
+    start_param?: string
+  }
+  version: string
+  platform: string
+  openInvoice: (url: string, callback?: (status: string) => void) => void
+  requestLocation: (callback: (location: { latitude: number; longitude: number } | null) => void) => void
+  showPopup: (params: { title?: string; message: string; buttons?: Array<{ id?: string; type?: 'default' | 'ok' | 'close' | 'cancel' | 'destructive'; text: string }> }, callback?: (buttonId: string) => void) => void
+  CloudStorage: {
+    setItem: (key: string, value: string, cb?: (err: string | null, done: boolean) => void) => void
+    getItems: (keys: string[], cb: (err: string | null, result: Record<string, string>) => void) => void
+  }
 }
 
-function isRecentlyActive(updatedAt?: string): boolean {
-  if (!updatedAt) return false
-  return Date.now() - new Date(updatedAt).getTime() < 60 * 60 * 1000
+declare global {
+  interface Window {
+    Telegram?: { WebApp?: TgWebApp }
+  }
 }
 
-function formatDist(d?: number): string {
-  if (!d) return ''
-  if (d < 1) return `${(d * 1000).toFixed(0)}m`
-  return `${d.toFixed(1)}km`
+function getTg(): TgWebApp | undefined {
+  try { return window.Telegram?.WebApp } catch { return undefined }
 }
+
+function isInTelegram(): boolean {
+  return !!getTg()?.initData
+}
+
+// ─── Admin Config ────────────────────────────────────────────────────
+
+// Only these Telegram usernames / IDs are admins. Bot owner is always included.
+// Add more here when requested.
+const ADMIN_IDS = [1231127407, 6837870949]
+const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly']
+
+function isAdminUser(user: { id?: number; username?: string } | null | undefined): boolean {
+  if (!user) return false
+  if (user.id && ADMIN_IDS.includes(user.id)) return true
+  if (user.username && ADMIN_USERNAMES.includes(user.username)) return true
+  return false
+}
+
+// ─── Storage Keys ────────────────────────────────────────────────────
+
+const CLOUD = {
+  age: 'hk_age',
+  height: 'hk_height',
+  weight: 'hk_weight',
+  position: 'hk_position',
+  isSide: 'hk_isSide',
+  pref1: 'hk_pref1',
+  pref2: 'hk_pref2',
+  pref3: 'hk_pref3',
+  pref4: 'hk_pref4',
+  openMsg: 'hk_open_msg',
+  lat: 'hk_lat',
+  lng: 'hk_lng',
+  photoUrl: 'hk_photo_url',
+  name: 'hk_name',
+  lang: 'hk_lang',
+  prefChangedAt: 'hk_pref_changed_at',
+  prefLockedAt: 'hk_pref_locked_at',
+  filtersUnlocked: 'hk_filters_unlocked',
+  filtersUnlockedAt: 'hk_filters_unlocked_at',
+  gridRowsUnlocked: 'hk_grid_rows_unlocked',
+  gridRowsUnlockedAt: 'hk_grid_rows_unlocked_at',
+  invisibleActive: 'hk_invisible_active',
+  channelFollowed: 'hk_channel_followed',
+}
+
+// Telegram CloudStorage
+function cloudSet(key: string, value: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tg = getTg()
+    if (!tg?.CloudStorage) { resolve(false); return }
+    tg.CloudStorage.setItem(key, value, (err, done) => {
+      if (err) console.error('CloudStorage set error:', key, err)
+      resolve(!err && done)
+    })
+  })
+}
+
+function cloudGetAll(keys: string[]): Promise<Record<string, string> | null> {
+  return new Promise((resolve) => {
+    const tg = getTg()
+    if (!tg?.CloudStorage) { resolve(null); return }
+    tg.CloudStorage.getItems(keys, (err, result) => {
+      if (err) { console.error('CloudStorage get error:', err); resolve(null); return }
+      resolve(result || {})
+    })
+  })
+}
+
+// localStorage fallback with user ID prefix
+function getUserId(): number | null {
+  const tg = getTg()
+  return tg?.initDataUnsafe?.user?.id || null
+}
+
+function userKey(key: string): string {
+  const uid = getUserId()
+  return uid ? `${uid}_${key}` : key
+}
+
+const lsSet = (key: string, value: string) => {
+  const k = userKey(key)
+  try { localStorage.setItem('hkmoc_' + k, value) } catch {}
+}
+
+const lsGet = (key: string): string | null => {
+  const k = userKey(key)
+  try { return localStorage.getItem('hkmoc_' + k) } catch { return null }
+}
+
+const lsGetAll = (): Record<string, string> => {
+  const r: Record<string, string> = {}
+  const uid = getUserId()
+  const prefix = uid ? `hkmoc_${uid}_` : 'hkmoc_'
+  try {
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith(prefix)) {
+        const shortKey = uid ? k.replace(`hkmoc_${uid}_`, '') : k.replace('hkmoc_', '')
+        r[shortKey] = localStorage.getItem(k) || ''
+      }
+    })
+  } catch {}
+  return r
+}
+
+// Unified storage: saves to both Telegram CloudStorage AND localStorage with user ID prefix
+async function storageSet(key: string, value: string): Promise<void> {
+  lsSet(key, value)
+  const k = userKey(key)
+  await cloudSet(k, value)
+}
+
+async function storageGet(key: string): Promise<string | null> {
+  const k = userKey(key)
+  try {
+    const cloud = await cloudGetAll([k])
+    if (cloud && cloud[k]) return cloud[k]
+  } catch {}
+  return lsGet(key)
+}
+
+async function storageGetAll(): Promise<Record<string, string>> {
+  const keys = Object.values(CLOUD).map(k => userKey(k))
+  const cloud = await cloudGetAll(keys)
+  const ls = lsGetAll()
+  // Un-prefix cloud keys back to short form
+  const uid = getUserId()
+  const unPrefixed: Record<string, string> = {}
+  if (cloud && uid) {
+    Object.entries(cloud).forEach(([k, v]) => {
+      const shortKey = k.replace(`${uid}_`, '')
+      unPrefixed[shortKey] = v
+    })
+  }
+  return { ...ls, ...unPrefixed }
+}
+
+// ─── Role Helpers ────────────────────────────────────────────────────
+
+function formatRole(value: number, isSide: boolean): string {
+  if (isSide) return 'Side'
+  if (value === 0) return '0 Bottom'
+  if (value === 1) return '1 Top'
+  if (value <= 0.4) return `${value.toFixed(1)} Versatile Bottom`
+  if (value === 0.5) return `${value.toFixed(1)} Versatile`
+  return `${value.toFixed(1)} Versatile Top`
+}
+
+// Short role label shown on grid (B, VB, V, VT, T, Side)
+function getGridRoleLabel(value: number, isSide: boolean): string {
+  if (isSide) return 'Side'
+  if (value === 0) return 'B'
+  if (value === 1) return 'T'
+  if (value <= 0.4) return 'VB'
+  if (value === 0.5) return 'V'
+  return 'VT'
+}
+
+
+
+// ─── Filter Logic ────────────────────────────────────────────────────
+
+type RoleFilterMode = 'All' | 'B' | 'VB' | 'V' | 'VT' | 'T' | 'Side'
 
 function getTimeAgo(updatedAt?: string): string {
   if (!updatedAt) return ''
-  const min = Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60000)
+  const ms = Date.now() - new Date(updatedAt).getTime()
+  const min = Math.floor(ms / 60000)
   if (min < 1) return 'now'
   if (min < 60) return `${min}m`
   const hr = Math.floor(min / 60)
   if (hr < 24) return `${hr}h`
-  return `${Math.floor(hr / 24)}d`
+  const day = Math.floor(hr / 24)
+  return `${day}d`
 }
 
-function dbToProfile(u: DbUser, ownId: number): UserProfile {
-  const dist = u.lat && u.lng ? undefined : undefined // calculated client-side
-  return {
-    id: u.id, name: u.name || 'User', tgPhotoUrl: u.photo_url || '',
-    height: u.height || 0, weight: u.weight || 0, lat: u.lat || 0, lng: u.lng || 0,
-    gender: u.gender || '', seekingGender: u.seeking_gender || '',
-    dob: u.dob || null, seekingToday: u.seeking_today || null, meetupType: u.meetup_type || null,
-    isOnline: u.is_online || false, isOwn: u.id === ownId, updatedAt: u.updated_at || '',
-    distance: dist, isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
-    openToMessages: u.open_to_messages ?? true, hideAgeUntil: u.hide_age_until || null,
+// Online: own profile always active (user is using app). Others: updated within 1 hour.
+function isUserActive(user: UserProfile): boolean {
+  if (user.isOwn) return true
+  if (!user.updatedAt) return false
+  return Date.now() - new Date(user.updatedAt).getTime() < 60 * 60 * 1000
+}
+
+// ─── Filter Logic ────────────────────────────────────────────────────
+
+
+function getFilterColor(mode: RoleFilterMode): string {
+  const colors: Record<RoleFilterMode, string> = {
+    'All': 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]',
+    'B': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    'VB': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    'V': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    'VT': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    'T': 'bg-red-500/20 text-red-400 border-red-500/30',
+    'Side': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
   }
+  return colors[mode]
 }
 
-// ─── Splash Screen ───────────────────────────────────────────────────
+// ─── Distance
 
-function SplashScreen({ onDone }: { onDone: () => void }) {
-  const [fade, setFade] = useState(false)
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setFade(true), 2500)
-    const t2 = setTimeout(() => onDone(), 2800)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
-  }, [onDone])
-
-  return (
-    <div className={`fixed inset-0 z-[80] bg-[#0A0A0A] flex flex-col items-center justify-center transition-opacity duration-500 ${fade ? 'opacity-0' : 'opacity-100'}`}>
-      <video
-        src={lmnLogoAnim}
-        autoPlay
-        muted
-        playsInline
-        loop
-        className="w-28 h-28 rounded-2xl mb-4 object-cover"
-      />
-      <h1 className="text-3xl font-bold gradient-text tracking-tight mb-1">Let's Meet Now</h1>
-      <p className="text-[#8E8E93] text-sm">Meet people nearby</p>
-      <div className="absolute bottom-8">
-        <div className="w-6 h-6 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
-      </div>
-    </div>
-  )
+function getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371e3
+  const toRad = (x: number) => x * Math.PI / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// ─── Disclaimer Modal ────────────────────────────────────────────────
-
-function DisclaimerModal({ onAgree, lang }: { onAgree: () => void; lang: Lang }) {
-  const [checked, setChecked] = useState(false)
-
-  return (
-    <div className="fixed inset-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center px-5">
-      <img src={lmnLogo} alt="LMN" className="w-16 h-16 rounded-2xl mb-4" />
-      <h1 className="text-xl font-bold gradient-text mb-1">Let's Meet Now</h1>
-      <p className="text-[#8E8E93] text-xs mb-6">{t(lang, 'splashTagline')}</p>
-
-      <div className="w-full max-w-sm bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-5 space-y-4 max-h-[60vh] overflow-y-auto">
-        <h2 className="text-white font-bold text-lg">{t(lang, 'disclaimerTitle')}</h2>
-
-        <div className="space-y-3 text-[#8E8E93] text-xs leading-relaxed">
-          <div className="flex items-start gap-2">
-            <span className="text-[#FF6B35] font-bold flex-shrink-0">18+</span>
-            <span>{t(lang, 'disclaimerAge')}</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-[#FF6B35] font-bold flex-shrink-0">📍</span>
-            <span>{t(lang, 'disclaimerLoc')}</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-[#FF6B35] font-bold flex-shrink-0">🤝</span>
-            <span>{t(lang, 'disclaimerConduct')}</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-[#FF6B35] font-bold flex-shrink-0">🔒</span>
-            <span>{t(lang, 'disclaimerPrivacy')}</span>
-          </div>
-        </div>
-
-        <label className="flex items-start gap-2 cursor-pointer pt-2">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={e => setChecked(e.target.checked)}
-            className="mt-0.5 w-4 h-4 rounded border-[#2C2C2E] bg-[#0A0A0A] text-[#FF6B35] accent-[#FF6B35]"
-          />
-          <span className="text-[#8E8E93] text-xs">{t(lang, 'disclaimerAgree')}</span>
-        </label>
-
-        <button
-          onClick={onAgree}
-          disabled={!checked}
-          className={`w-full h-11 rounded-xl text-white font-semibold text-sm nav-press ${
-            checked ? 'gradient-btn' : 'bg-[#2C2C2E] text-[#8E8E93] cursor-not-allowed'
-          }`}
-        >
-          {t(lang, 'disclaimerContinue')}
-        </button>
-      </div>
-    </div>
-  )
+function formatDist(d: number): string {
+  if (d === 0) return '0m'
+  if (d < 1000) return `${Math.round(d)}m`
+  return `${(d / 1000).toFixed(1)}km`
 }
 
-// ─── Age Gate ─────────────────────────────────────────────────────────
+// ─── DbUser → UserProfile ────────────────────────────────────────────
 
-function AgeGate({ onConfirm, lang }: { onConfirm: (dob: string) => void; lang: Lang }) {
-  const [dob, setDob] = useState('')
-  const [err, setErr] = useState('')
-  return (
-    <div className="fixed inset-0 z-[60] bg-[#0A0A0A] flex flex-col items-center justify-center px-6">
-      <img src={lmnLogo} alt="LMN" className="w-20 h-20 rounded-2xl mb-4" />
-      <h1 className="text-2xl font-bold text-white mb-1">Let's Meet Now</h1>
-      <p className="text-[#8E8E93] text-sm mb-8">Meet people nearby</p>
-      <div className="w-full max-w-sm bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-5">
-        <h2 className="text-white font-bold text-lg mb-1">Confirm Your Age</h2>
-        <p className="text-[#8E8E93] text-xs mb-4">You must be 18 or older.</p>
-        <input type="date" value={dob} onChange={e => setDob(e.target.value)}
-          className="w-full h-10 bg-[#0A0A0A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
-        {err && <p className="text-red-400 text-xs mt-2">{err}</p>}
-        <button onClick={() => {
-          if (!dob) { setErr('Please enter your date of birth'); return }
-          const age = getAge(dob)
-          if (age < 18) { setErr('You must be 18 or older'); return }
-          onConfirm(dob)
-        }} className="w-full h-11 mt-4 gradient-btn rounded-xl text-white font-semibold text-sm nav-press">
-          Enter
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Gender Setup ─────────────────────────────────────────────────────
-
-function GenderSetup({ onComplete, lang }: { onComplete: (gender: string, seeking: string) => void; lang: Lang }) {
-  const [gender, setGender] = useState('')
-  const [seeking, setSeeking] = useState('')
-  const [err, setErr] = useState('')
-  return (
-    <div className="fixed inset-0 z-[60] bg-[#0A0A0A] flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-sm bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-5">
-        <h2 className="text-white font-bold text-lg mb-4">Set Up Profile</h2>
-        <p className="text-[#8E8E93] text-xs mb-3">I am:</p>
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          {GENDERS.map(g => (
-            <button key={g} onClick={() => setGender(g)}
-              className={`h-12 rounded-xl font-semibold text-sm nav-press ${
-                gender === g ? 'bg-[#FF6B35]/10 text-[#FF6B35] border-2 border-[#FF6B35]' : 'bg-[#0A0A0A] text-white border border-[#2C2C2E]'
-              }`}>
-              {g === 'Male' ? t(lang, 'genderMale', 'lmn') : t(lang, 'genderFemale', 'lmn')}
-            </button>
-          ))}
-        </div>
-        <p className="text-[#8E8E93] text-xs mb-3">Looking for:</p>
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          {SEEKING_GENDERS.map(g => (
-            <button key={g} onClick={() => setSeeking(g)}
-              className={`h-12 rounded-xl font-semibold text-sm nav-press ${
-                seeking === g ? 'bg-[#5AC8FA]/10 text-[#5AC8FA] border-2 border-[#5AC8FA]' : 'bg-[#0A0A0A] text-white border border-[#2C2C2E]'
-              }`}>
-              {g === 'Men' ? t(lang, 'seekingMen', 'lmn') : t(lang, 'seekingWomen', 'lmn')}
-            </button>
-          ))}
-        </div>
-        {err && <p className="text-red-400 text-xs mb-3">{err}</p>}
-        <button onClick={() => {
-          if (!gender || !seeking) { setErr('Please select both'); return }
-          onComplete(gender, seeking)
-        }} className="w-full h-11 gradient-btn rounded-xl text-white font-semibold text-sm nav-press">
-          Continue
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Profile Grid Tile ───────────────────────────────────────────────
-
-function ProfileTile({ user, onClick }: { user: UserProfile; onClick: () => void }) {
-  const zodiac = user.dob ? getZodiac(user.dob) : ''
-  const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
-  const hiddenAge = user.hideAgeUntil && new Date(user.hideAgeUntil).getTime() > Date.now()
-  const age = user.dob ? (hiddenAge ? 'N/A' : String(getAge(user.dob))) : '?'
-  return (
-    <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
-      {user.tgPhotoUrl ? (
-        <img src={user.tgPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center">
-          <span className="text-lg font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
-        </div>
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
-      {user.isInvisible && (
-        <div className="absolute top-0.5 left-0.5 z-30 w-3 h-3 rounded-full bg-purple-500/40 border border-purple-400/30 flex items-center justify-center text-[7px]">
-          👁️‍🗨️
-        </div>
-      )}
-      {user.openToMessages && (
-        <div className="absolute top-0.5 left-4 z-30 w-3 h-3 rounded-full bg-black/50 flex items-center justify-center text-[7px]">⭐</div>
-      )}
-      {user.isOnline && <div className="absolute top-0.5 right-0.5 z-30 w-2 h-2 bg-[#00D4AA] rounded-full" />}
-      {user.isOwn && <div className="absolute inset-0 border-2 border-[#FF6B35] rounded-lg pointer-events-none z-30" />}
-      <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] z-30 pointer-events-none">
-        <p className={`font-semibold text-[8px] truncate ${user.isOwn ? 'text-[#FF6B35]' : 'text-white'}`}>
-          {user.isOwn ? 'You' : user.name}
-        </p>
-        <div className="flex items-center justify-between">
-          <span className="text-[#FF6B35] text-[7px]">{formatDist(user.distance)}</span>
-          <span className="text-[#8E8E93] text-[6px]">{age} {emoji}</span>
-        </div>
-        <p className="text-[6px] text-[#8E8E93]">{user.seekingToday || ''} {user.meetupType ? `| ${user.meetupType}` : ''}</p>
-      </div>
-    </button>
-  )
+function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
+  const dist = u.lat && u.lng ? getDistance(myLat, myLng, u.lat, u.lng) : 0
+  return {
+    id: String(u.id),
+    name: u.name,
+    age: 0,
+    height: u.height,
+    weight: u.weight,
+    position: u.position,
+    isSide: u.is_side,
+    isOnline: u.is_online,
+    distance: Math.round(dist),
+    lat: u.lat,
+    lng: u.lng,
+    preference1: u.preference1 as 'Safe' | 'Raw',
+    preference2: u.preference2 as 'Clean' | 'Party' | 'Party✓',
+    preference3: u.preference3 as '1on1' | 'Group',
+    preference4: (u.preference4 === 'Off' ? 'Travel' : u.preference4 as 'Host' | 'Travel' | 'Outdoor' | 'Sauna') || undefined,
+    openToMessages: u.open_to_messages || false,
+    tgUsername: u.tg_username || undefined,
+    tgPhotoUrl: u.photo_url?.startsWith('http') ? u.photo_url : undefined,
+    tgPhotos: u.photo_url?.startsWith('http') ? [u.photo_url] : [],
+    updatedAt: u.updated_at,
+    // hasPhoto: true = has any avatar image (real photo, initials, emoji)
+    hasPhoto: !!(u.photo_url && u.photo_url.startsWith('http')),
+    // hasRealPhoto: from DB (detected via Content-Type on user's login)
+    hasRealPhoto: u.has_real_photo ?? undefined,
+    // Invisible mode
+    invisibleUntil: u.invisible_until ?? undefined,
+    isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
+  }
 }
 
 // ─── Photo Overlay ────────────────────────────────────────────────────
 
-function PhotoOverlay({ user, onClose, lang }: { user: UserProfile; onClose: () => void; lang: Lang }) {
-  const zodiac = user.dob ? getZodiac(user.dob) : ''
-  const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
-  const hiddenAge = user.hideAgeUntil && new Date(user.hideAgeUntil).getTime() > Date.now()
-  const age = user.dob ? (hiddenAge ? 'Hidden' : getAge(user.dob)) : '?'
+function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; onClose: () => void; onMessage: (u: UserProfile) => void; lang: Lang }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const photos = user.tgPhotos?.length ? user.tgPhotos : (user.tgPhotoUrl ? [user.tgPhotoUrl] : [])
+  const role = formatRole(user.position, user.isSide)
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return
+    setActiveIdx(Math.round(scrollRef.current.scrollLeft / scrollRef.current.clientWidth))
+  }
+
   return (
-    <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col animate-in fade-in duration-200">
+    <div className="fixed top-0 left-0 right-0 bottom-0 z-[60] bg-black/95 flex flex-col animate-in fade-in duration-200" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
       <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-[#1A1A1A]/80 flex items-center justify-center z-20 nav-press">
         <X className="w-5 h-5 text-white" />
       </button>
-      <div className="flex-1 flex items-center justify-center p-4">
-        {user.tgPhotoUrl ? (
-          <img src={user.tgPhotoUrl} alt="" className="max-w-full max-h-[70vh] object-contain rounded-2xl" draggable={false} referrerPolicy="no-referrer" />
+
+      <div className="flex-1 flex items-center relative">
+        {photos.length > 0 ? (
+          <>
+            <div ref={scrollRef} onScroll={handleScroll} className="w-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
+              {photos.map((photo, i) => (
+                <div key={i} className="w-full flex-shrink-0 snap-center flex items-center justify-center">
+                  <img
+                    src={photo}
+                    alt={`${user.name} ${i + 1}`}
+                    className="max-w-full max-h-[65vh] object-contain"
+                    draggable={false}
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ))}
+            </div>
+            {photos.length > 1 && (
+              <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                <span className="text-white text-xs font-medium">{activeIdx + 1} / {photos.length}</span>
+              </div>
+            )}
+          </>
         ) : (
-          <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
-            <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+          <div className="w-full flex items-center justify-center">
+            <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
+              <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+            </div>
           </div>
         )}
       </div>
-      <div className="px-4 pb-4 pt-2">
+
+      {photos.length > 1 && (
+        <div className="flex justify-center gap-1.5 pb-3">
+          {photos.map((_, i) => <div key={i} className={`h-1.5 rounded-full transition-all duration-200 ${i === activeIdx ? 'w-4 bg-[#FF6B35]' : 'w-1.5 bg-[#8E8E93]/40'}`} />)}
+        </div>
+      )}
+
+      <div className="w-full px-4 pb-4 pt-2">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-white font-bold text-lg">{user.name}</p>
+            <p className="text-white font-bold text-lg">{user.age ? `${user.name}, ${user.age}` : user.name}</p>
             <div className="flex items-center gap-2 mt-0.5">
               <MapPin className="w-3.5 h-3.5 text-[#FF6B35]" />
               <span className="text-[#8E8E93] text-xs">{formatDist(user.distance)}</span>
-              {isRecentlyActive(user.updatedAt) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">ONLINE</span>}
+              {isUserActive(user) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
             </div>
           </div>
           {!user.isOwn && (
-            <button className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
+            <button onClick={() => onMessage(user)} className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
               <MessageCircle className="w-4 h-4" />
-              {user.openToMessages ? '⭐ Message' : 'Message'}
+              {user.openToMessages ? '⭐ ' + t(lang, 'message') : t(lang, 'message')}
             </button>
           )}
         </div>
-        <div className="flex flex-wrap gap-2 mt-3 text-xs">
-          <span className="text-[#8E8E93]">H: {user.height}cm</span>
-          <span className="text-[#8E8E93]">W: {user.weight}kg</span>
-          <span className="text-[#FF6B35] font-bold">{age} {emoji}</span>
-          <span className="text-[#8E8E93]">{user.seekingToday || ''}</span>
-          <span className="text-[#8E8E93]">{user.meetupType || ''}</span>
-          {user.openToMessages && <span className="font-bold text-yellow-400">⭐ Open</span>}
+        <div className="flex gap-3 mt-3 text-xs">
+          <span className="text-[#8E8E93]">{user.height}cm</span>
+          <span className="text-[#8E8E93]">{user.weight}kg</span>
+          <span className="text-[#FF6B35] font-bold">{role}</span>
+          {user.preference1 && <span className={`font-bold ${user.preference1 === 'Safe' ? 'text-green-400' : 'text-red-400'}`}>{user.preference1}</span>}
+          {user.preference2 && <span className={`font-bold ${user.preference2 === 'Clean' ? 'text-blue-400' : 'text-purple-400'}`}>{user.preference2}</span>}
+          {user.preference3 && <span className={`font-bold ${user.preference3 === '1on1' ? 'text-yellow-400' : 'text-orange-400'}`}>{user.preference3}</span>}
+          {user.preference4 && <span className={`font-bold ${user.preference4 === 'Host' ? 'text-indigo-400' : user.preference4 === 'Travel' ? 'text-cyan-400' : user.preference4 === 'Outdoor' ? 'text-lime-400' : 'text-amber-400'}`}>{user.preference4}</span>}
+          {user.openToMessages && <span className="font-bold text-yellow-400">⭐ {t(lang, 'message')}</span>}
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Raffle Button ───────────────────────────────────────────────────
+// ─── Location Gate ────────────────────────────────────────────────────
 
-function RaffleButton({ raffle, isAdmin, onBuy, onStartNext, lang }: {
-  raffle: Raffle | null; isAdmin: boolean; onBuy: () => void;
-  onStartNext: () => void; lang: Lang
-}) {
-  if (!raffle || raffle.status === 'complete') {
-    return (
-      <button
-        onClick={() => { if (isAdmin) onStartNext() }}
-        className={`text-[10px] px-2 py-1 rounded-full nav-press ${
-          isAdmin
-            ? 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93] hover:bg-yellow-500/10 hover:text-yellow-400 hover:border-yellow-500/30'
-            : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93] opacity-50'
-        }`}
-        title={isAdmin ? 'Start Next Raffle' : 'No raffles'}
-      >
-        🎁
-      </button>
+function LocationGate({ onGranted, lang }: { onGranted: (lat: number, lng: number) => void; lang: Lang }) {
+  const [status, setStatus] = useState<'checking' | 'needed' | 'requesting' | 'denied'>('checking')
+
+  const requestLocation = () => {
+    setStatus('requesting')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { onGranted(pos.coords.latitude, pos.coords.longitude) },
+      () => { setStatus('denied') },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     )
   }
-  if (raffle.status === 'waiting' || raffle.status === 'active') {
+
+  useEffect(() => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => onGranted(pos.coords.latitude, pos.coords.longitude),
+      () => setStatus('needed'),
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
+    )
+  }, [onGranted])
+
+  if (status === 'checking') {
     return (
-      <div className="flex items-center gap-1">
-        <span className="text-[#FF6B35] text-[10px] font-bold">{raffle.tickets_sold}/{raffle.target_tickets}</span>
-        <button className="text-[10px] px-2 py-1 rounded-full gradient-btn text-white nav-press" onClick={onBuy}>50 ⭐</button>
+      <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+        <LocateFixed className="w-12 h-12 text-[#FF6B35] animate-pulse mb-4" />
+        <p className="text-white font-semibold">{t(lang, 'checkingLoc')}</p>
       </div>
     )
   }
-  return null
+
+  return (
+    <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center px-6" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+      <div className="w-16 h-16 rounded-full bg-[#FF6B35]/10 flex items-center justify-center mb-4">
+        <LocateFixed className="w-8 h-8 text-[#FF6B35]" />
+      </div>
+      <h2 className="text-xl font-bold text-white mb-2">{t('en', 'locationRequired')}</h2>
+      <p className="text-[#8E8E93] text-sm text-center mb-6">
+        {t(lang, 'locationDesc')}
+      </p>
+      {status === 'denied' && (
+        <div className="bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-4 mb-4 w-full max-w-sm">
+          <p className="text-[#FF6B35] text-sm font-semibold mb-1">{t(lang, 'permissionDenied')}</p>
+          <p className="text-[#8E8E93] text-xs">{t(lang, 'enableLocation')}</p>
+        </div>
+      )}
+      <button onClick={requestLocation} disabled={status === 'requesting'} className="w-full max-w-sm h-12 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center justify-center gap-2">
+        <LocateFixed className="w-4 h-4" />
+        {status === 'requesting' ? t(lang, 'checkingLoc') : t(lang, 'tapToRetry')}
+      </button>
+      <button onClick={() => onGranted(22.3193, 114.1694)} className="mt-3 text-[#8E8E93] text-xs underline">
+        Continue without location
+      </button>
+    </div>
+  )
 }
 
-// ─── Auto-Rotating Unlock Tip ────────────────────────────────────────
-function UnlockTip({ lang, gridRows, channelFollowUnlock, onClaimChannelFollow }: {
-  lang: Lang; gridRows: number; channelFollowUnlock: number; onClaimChannelFollow: () => void;
-}) {
+// ─── Unlock Tip Cycle — cycles through ways to unlock more rows ──────
+
+function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
   const [idx, setIdx] = useState(0)
   const tips = {
     en: [
-      'Base: 2 rows free',
-      'Add a Telegram photo +1',
-      'Boost @LetsMeetNowApp +1~4',
-      '⭐ = charge stars per message',
-      channelFollowUnlock ? 'Channel: +1 ✅' : 'Join @LetsMeetNowApp +1',
-      'Buy rows with ⭐ Stars',
+      `Base: 2 rows free`,
+      isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)`,
+      `Purchased: ${gridRowsUnlocked} rows`,
+      `Add a Telegram photo +1`,
+      `Boost @HKMembersOnlyChat +1~4`,
+      `⭐ = charge stars per message`,
+      channelFollowUnlock ? `Group: +1 row ✅` : `Join @HKMembersOnlyChat +1`,
+      `Buy rows with ⭐ Stars`,
     ],
     tc: [
-      '基礎: 2 行免費',
-      '加入 Telegram 頭像 +1',
-      'Boost @LetsMeetNowApp +1~4',
-      '⭐ = 按訊息收費',
-      channelFollowUnlock ? '頻道: +1 行 ✅' : '加入 @LetsMeetNowApp +1',
-      '用 ⭐ 星星購買行數',
+      `基礎: 2 行免費`,
+      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
+      `已購: ${gridRowsUnlocked} 行`,
+      `加入 Telegram 頭像 +1`,
+      `Boost @HKMembersOnlyChat +1~4`,
+      `⭐ = 按訊息收費`,
+      channelFollowUnlock ? `群組: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`,
+      `用 ⭐ 星星購買行數`,
     ],
     sc: [
-      '基础: 2 行免费',
-      '加入 Telegram 头像 +1',
-      'Boost @LetsMeetNowApp +1~4',
-      '⭐ = 按消息收费',
-      channelFollowUnlock ? '频道: +1 行 ✅' : '加入 @LetsMeetNowApp +1',
-      '用 ⭐ 星星购买行数',
+      `基础: 2 行免费`,
+      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
+      `已购: ${gridRowsUnlocked} 行`,
+      `加入 Telegram 头像 +1`,
+      `Boost @HKMembersOnlyChat +1~4`,
+      `⭐ = 按消息收费`,
+      channelFollowUnlock ? `群组: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`,
+      `用 ⭐ 星星购买行数`,
     ],
     ru: [
-      'База: 2 строки бесплатно',
-      'Добавь фото в Telegram +1',
-      'Boost @LetsMeetNowApp +1~4',
-      '⭐ = плата за сообщение',
-      channelFollowUnlock ? 'Канал: +1 строка ✅' : 'Вступи в @LetsMeetNowApp +1',
-      'Купить строки за ⭐',
+      `База: 2 строки бесплатно`,
+      isPremium ? `Premium: +1 строка` : `Premium: +1 строка (не активен)`,
+      `Куплено: ${gridRowsUnlocked} строк`,
+      `Добавь фото в Telegram +1`,
+      `Boost @HKMembersOnlyChat +1~4`,
+      `⭐ = плата за сообщение`,
+      channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в @HKMembersOnlyChat +1`,
+      `Купить строки за ⭐`,
     ],
   }
   const list = tips[lang] || tips.en
-  const isChannelTip = idx % list.length === 4
 
   // Auto-rotate every 5 seconds
   useEffect(() => {
@@ -436,776 +560,1326 @@ function UnlockTip({ lang, gridRows, channelFollowUnlock, onClaimChannelFollow }
     return () => clearInterval(i)
   }, [list.length])
 
+  const current = list[idx % list.length]
+  const isChannelTip = idx % list.length === 6
+
   return (
     <button
-      onClick={() => { if (isChannelTip && !channelFollowUnlock) onClaimChannelFollow() }}
-      className={`ml-auto text-[9px] nav-press flex items-center gap-1 ${isChannelTip && !channelFollowUnlock ? 'text-[#5AC8FA]' : 'text-[#8E8E93]'}`}
+      onClick={() => {
+        if (isChannelTip && !channelFollowUnlock) {
+          onClaimChannelFollow()
+        } else {
+          setIdx((i) => i + 1)
+        }
+      }}
+      className="ml-auto flex items-center gap-1 text-[9px] text-[#8E8E93] nav-press"
     >
-      <span className="w-4 h-4 rounded-full bg-[#2C2C2E] flex items-center justify-center text-[8px]">💡</span>
-      <span className="truncate max-w-[140px]">{list[idx % list.length]}</span>
+      <span className="w-4 h-4 rounded-full bg-[#2C2C2E] flex items-center justify-center">💡</span>
+      <span className={`truncate max-w-[140px] ${isChannelTip && !channelFollowUnlock ? 'text-[#5AC8FA]' : ''}`}>{current}</span>
     </button>
   )
 }
 
-// ─── Main Screen ─────────────────────────────────────────────────────
+// ─── Profile Grid Tile ───────────────────────────────────────────────
 
-function MainScreen({
-  ownProfile, users, onViewOwn, onViewPhoto, isLoading, lang, setLang,
-  onRefresh, isAdmin, filtersUnlocked, onUnlockFilters, onToggleInvisible,
-  gridRows, channelFollowUnlock, onClaimChannelFollow, isInvisible, invisiblePurchased, raffle, onBuyTicket, onStartNext,
-  profileUnlocked, onUnlockProfile,
-}: {
-  ownProfile: UserProfile; users: UserProfile[]; onViewOwn: () => void;
-  onViewPhoto: (u: UserProfile) => void; isLoading: boolean; lang: Lang; setLang: (l: Lang) => void;
-  onRefresh: () => void; isAdmin: boolean; filtersUnlocked: boolean;
-  onUnlockFilters: () => void; onToggleInvisible: () => void;
-  gridRows: number; channelFollowUnlock: number; onClaimChannelFollow: () => void; isInvisible: boolean; invisiblePurchased: boolean;
-  raffle: Raffle | null; onBuyTicket: () => void; onStartNext: () => void;
-  profileUnlocked: boolean; onUnlockProfile: () => void;
+function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => void }) {
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const [imgFailed, setImgFailed] = useState(false)
+  const photo = user.tgPhotoUrl
+  const roleLabel = getGridRoleLabel(user.position, user.isSide)
+
+  return (
+    <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
+      {/* Invisible eye icon — shown on own profile when invisible, or admin sees on all invisible users */}
+      {user.isInvisible && (
+        <div className="absolute top-0.5 left-0.5 z-40 w-3 h-3 flex items-center justify-center rounded-full bg-purple-500/40 border border-purple-400/30 text-[7px]" title="Invisible">
+          👁️‍🗨️
+        </div>
+      )}
+      {/* Photo */}
+      {photo && !imgFailed && (
+        <img
+          src={photo}
+          alt={user.name}
+          className={`absolute inset-0 w-full h-full object-cover ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          style={{ transition: 'opacity 0.3s' }}
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgFailed(true)}
+          loading="eager"
+          referrerPolicy="no-referrer"
+          draggable={false}
+        />
+      )}
+      {/* Placeholder shown while loading or if no photo/error */}
+      {(!photo || imgFailed || !imgLoaded) && (
+        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-10">
+          <span className="text-lg font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+        </div>
+      )}
+      <div className="absolute inset-0 profile-photo-gradient pointer-events-none z-20" />
+      {isUserActive(user) && (
+        <div className="absolute top-0.5 right-0.5 w-2 h-2 bg-[#00D4AA] rounded-full online-pulse z-30" />
+      )}
+      {user.openToMessages && (
+        <div className="absolute top-0.5 left-0.5 z-30 text-[8px] bg-black/50 rounded-full w-4 h-4 flex items-center justify-center">⭐</div>
+      )}
+      {user.isOwn && (
+        <div className="absolute inset-0 border-2 border-[#FF6B35] rounded-lg pointer-events-none z-30" />
+      )}
+      <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] pointer-events-none z-30 flex flex-col justify-end">
+        <p className={`font-semibold text-[8px] leading-tight truncate ${user.isOwn ? 'text-[#FF6B35]' : 'text-white'}`}>
+          {user.isOwn ? 'You' : user.name}
+        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-[#FF6B35] text-[7px] font-medium">{formatDist(user.distance)}</p>
+          {!user.isOwn && <p className="text-[#8E8E93] text-[6px]">{getTimeAgo(user.updatedAt)}</p>}
+          <p className="text-[#8E8E93] text-[6px] font-bold">{roleLabel}</p>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────
+
+function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
+  ownProfile: UserProfile
+  users: UserProfile[]
+  onViewOwnProfile: () => void
+  onViewPhoto: (u: UserProfile) => void
+  showDbWarning: boolean
+  isLoadingUsers: boolean
+  lang: Lang
+  setLang: (l: Lang) => void
+  onRefresh: () => void
+  isAdmin: boolean
+  filtersUnlocked: boolean
+  onPromptUnlock: () => void
+  onToggleInvisible: () => void
+  gridRowsUnlocked: number
+  lastRefreshTime: number
+  setLastRefreshTime: (t: number) => void
+  isInvisible: boolean
+  invisiblePurchased: boolean
+  raffle: Raffle | null
+  onBuyRaffleTicket: () => void
+  onStartNextRaffle: () => void
+  onPromptUnlockProfile: () => void
+  isPremium: boolean
+  channelFollowUnlock: number
+  onClaimChannelFollow: () => void
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
-  const [photoOnly, setPhotoOnly] = useState(false)
-  const [sexFilter, setSexFilter] = useState<string | null>(null) // null = locked, 'All' = unlocked all
-  const [ageFilter, setAgeFilter] = useState('any')
-  const [zodiacFilter, setZodiacFilter] = useState<string | null>(null)
-  const [activityFilter, setActivityFilter] = useState<string | null>(null)
+  // Role/Host filters have 'All' (multiple options). Safe/Raw/Clean/Party/1on1/Group are binary — no 'All'.
+  const [pref1Filter, setPref1Filter] = useState<'Safe' | 'Raw'>(ownProfile.preference1 || 'Safe')
+  const [pref2Filter, setPref2Filter] = useState<'Clean' | 'Party' | 'Party✓'>(
+    ownProfile.preference2 === 'Party✓' ? 'Party' : (ownProfile.preference2 || 'Clean')
+  )
+  const [pref3Filter, setPref3Filter] = useState<'1on1' | 'Group'>(ownProfile.preference3 || '1on1')
+  const [hostFilter, setHostFilter] = useState<'All' | 'Host' | 'Travel' | 'Outdoor' | 'Sauna'>('All')
+  const [roleFilter, setRoleFilter] = useState<RoleFilterMode>('All')
+  const [photoFilter, setPhotoFilter] = useState<'有圖' | '沒圖'>('沒圖')
+  const [showTestUsers, setShowTestUsers] = useState(false)
 
-  const LANGS: Lang[] = ['en', 'tc', 'sc']
+  const LANG_CYCLE: Lang[] = ['en', 'tc', 'sc', 'ru']
   const cycleLang = () => {
-    const idx = LANGS.indexOf(lang)
-    const next = LANGS[(idx + 1) % LANGS.length]
+    const idx = LANG_CYCLE.indexOf(lang)
+    const next = LANG_CYCLE[(idx + 1) % LANG_CYCLE.length]
     setLang(next)
-    storage.set('lang', next)
+    storageSet(CLOUD.lang, next)
   }
 
-  const cycleSex = () => {
-    if (!filtersUnlocked && !isAdmin) return
-    const opts = ['All', 'Men', 'Women']
-    const current = sexFilter || 'All'
-    setSexFilter(opts[(opts.indexOf(current) + 1) % opts.length])
+  const cyclePref1Filter = () => {
+    setPref1Filter(pref1Filter === 'Safe' ? 'Raw' : 'Safe')
+  }
+  const cyclePref2Filter = () => {
+    const order: Array<'Clean' | 'Party' | 'Party✓'> = ['Clean', 'Party', 'Party✓']
+    const idx = order.indexOf(pref2Filter)
+    setPref2Filter(order[(idx + 1) % order.length])
+  }
+  const cyclePref3Filter = () => {
+    setPref3Filter(pref3Filter === '1on1' ? 'Group' : '1on1')
+  }
+  const cycleHostFilter = () => {
+    const order: Array<'All' | 'Host' | 'Travel' | 'Outdoor' | 'Sauna'> = ['All', 'Host', 'Travel', 'Outdoor', 'Sauna']
+    setHostFilter(order[(order.indexOf(hostFilter) + 1) % order.length])
+  }
+  // Party filter: Clean users = locked, Party/Party✓ users = only Party↔Party✓ (no Clean)
+  const cyclePartyPref2Filter = () => {
+    if (ownProfile.preference2 === 'Clean') return // locked, no-op
+    // Toggle between Party ↔ Party✓ only
+    setPref2Filter(pref2Filter === 'Party' ? 'Party✓' : 'Party')
   }
 
-  const cycleAge = () => {
-    if (!filtersUnlocked && !isAdmin) return
-    const idx = AGE_FILTERS.indexOf(ageFilter)
-    setAgeFilter(AGE_FILTERS[(idx + 1) % AGE_FILTERS.length])
+  const cycleRoleFilter = () => {
+    const order: RoleFilterMode[] = ['All', 'B', 'VB', 'V', 'VT', 'T', 'Side']
+    const idx = order.indexOf(roleFilter)
+    setRoleFilter(order[(idx + 1) % order.length])
   }
 
-  const cycleZodiac = () => {
-    if (!filtersUnlocked && !isAdmin) return
-    const signs = ZODIAC_SIGNS.map(z => z.name)
-    if (!zodiacFilter) setZodiacFilter(signs[0])
-    else {
-      const idx = signs.indexOf(zodiacFilter)
-      setZodiacFilter(idx < signs.length - 1 ? signs[idx + 1] : null)
-    }
-  }
-
-  const cycleActivity = () => {
-    if (!filtersUnlocked && !isAdmin) return
-    const opts = [null, ...SEEKING_TODAY_OPTS]
-    const idx = opts.indexOf(activityFilter)
-    setActivityFilter(opts[(idx + 1) % opts.length])
-  }
-
-  const filtered = [{ ...ownProfile, isOwn: true }, ...users.filter(u => u.id !== ownProfile.id)].filter(u => {
+  // Online = updated within 1 hour. Own profile always counts as active.
+  const ONE_HOUR = 60 * 60 * 1000
+  const isRecentlyActive = (u: UserProfile) => {
     if (u.isOwn) return true
-    if (onlineOnly && !isRecentlyActive(u.updatedAt)) return false
-    if (!isAdmin && u.isInvisible) return false
-    if (photoOnly && !u.tgPhotoUrl) return false
+    if (!u.updatedAt) return false
+    return Date.now() - new Date(u.updatedAt).getTime() < ONE_HOUR
+  }
 
-    // Gender matching - auto-filter to seeking preference
-    if (!isAdmin) {
-      if (ownProfile.seekingGender === 'Men' && u.gender !== 'Male') return false
-      if (ownProfile.seekingGender === 'Women' && u.gender !== 'Female') return false
-      if (u.seekingGender === 'Men' && ownProfile.gender !== 'Male') return false
-      if (u.seekingGender === 'Women' && ownProfile.gender !== 'Female') return false
+  // Patch own profile with current invisible state (toggle may have changed it)
+  const patchedOwnProfile = { ...ownProfile, isOwn: true, isInvisible: isInvisible || false }
+  const allGridUsers: UserProfile[] = [patchedOwnProfile, ...users.filter(u => u.id !== ownProfile.id)]
+  
+  // Invisible users: completely hidden from non-admins (not even greyed out)
+  const visibleGridUsers = isAdmin ? allGridUsers : allGridUsers.filter(u => u.isOwn || !u.isInvisible)
+  
+  const filteredGrid = visibleGridUsers.filter((u) => {
+    if (u.isOwn) return true
+    if (onlineOnly && !isRecentlyActive(u)) return false
+    // Test users: hidden by default, admin can show
+    // When shown, test users go through SAME filters as real users
+    if (u.tgUsername === '_test_') {
+      if (!showTestUsers) return false
+      // Continue to role + pref filters below (test users are NOT exempt)
     }
-    // Manual sex filter (unlocked)
-    if ((isAdmin || filtersUnlocked) && sexFilter && sexFilter !== 'All') {
-      if (sexFilter === 'Men' && u.gender !== 'Male') return false
-      if (sexFilter === 'Women' && u.gender !== 'Female') return false
+    
+    // 1. Role filter
+    if (isAdmin && roleFilter !== 'All') {
+      if (roleFilter === 'Side') {
+        if (!u.isSide) return false
+      } else {
+        if (u.isSide) return false
+        if (roleFilter === 'B') {
+          // B: B(0) + VB(0.1-0.4)
+          if (u.position > 0.4) return false
+        } else if (roleFilter === 'VB') {
+          // VB: B(0) + VB(0.1-0.4) + V(0.5)
+          if (u.position > 0.4 && u.position !== 0.5) return false
+        } else if (roleFilter === 'V') {
+          // V: all non-side (no position restriction)
+        } else if (roleFilter === 'VT') {
+          // VT: V(0.5) + VT(0.6-0.9) + T(1)
+          if (u.position < 0.5) return false
+        } else if (roleFilter === 'T') {
+          // T: VT(0.6-0.9) + T(1)
+          if (u.position < 0.6) return false
+        }
+      }
+    } else if (!isAdmin) {
+      // Non-admin: auto opposite role filter
+      if (ownProfile.isSide) {
+        if (!u.isSide) return false
+      } else {
+        if (u.isSide) return false
+        // B/VB sees V/VT/T (position >= 0.5)
+        if (ownProfile.position <= 0.4 && u.position < 0.5) return false
+        // VT/T sees B/VB/V (position <= 0.5)
+        if (ownProfile.position >= 0.6 && u.position > 0.5) return false
+        // V (0.5) sees all non-side — no filter
+      }
     }
-
-    // Age filter
-    if ((isAdmin || filtersUnlocked) && ageFilter !== 'any' && u.dob) {
-      const age = getAge(u.dob)
-      const myAge = ownProfile.dob ? getAge(ownProfile.dob) : 30
-      if (ageFilter === 'older' && age <= myAge) return false
-      if (ageFilter === 'younger' && age >= myAge) return false
-      if (ageFilter === 'same' && Math.abs(age - myAge) > 3) return false
+    
+    // 2. Preference1 filter (Safe/Raw) — binary, always active
+    if (u.preference1 !== pref1Filter) return false
+    // 3. Preference2 filter — 'Party' shows both Party and Party✓
+    if (pref2Filter === 'Party✓') {
+      if (u.preference2 !== 'Party✓') return false
+    } else if (pref2Filter === 'Party') {
+      if (u.preference2 !== 'Party' && u.preference2 !== 'Party✓') return false
+    } else {
+      if (u.preference2 !== pref2Filter) return false
     }
-
-    // Zodiac filter
-    if ((isAdmin || filtersUnlocked) && zodiacFilter && u.dob) {
-      if (getZodiac(u.dob) !== zodiacFilter) return false
-    }
-
-    // Activity filter
-    if ((isAdmin || filtersUnlocked) && activityFilter && u.seekingToday !== activityFilter) return false
-
+    // 4. Preference3 filter (1on1/Group) — 1on1 filters to 1on1 only, Group shows all
+    if (pref3Filter === '1on1' && u.preference3 !== '1on1') return false
+    // 5. Host/Travel/Outdoor/Sauna — 'All' = no filter
+    if (hostFilter !== 'All' && u.preference4 !== hostFilter) return false
+    // 6. Photo filter — '有圖' = only users with real uploaded photos (hasRealPhoto from DB)
+    if (photoFilter === '有圖' && u.hasRealPhoto !== true) return false
     return true
   }).sort((a, b) => {
+    // Own profile always first, then sort by distance (closest first)
     if (a.isOwn) return -1
     if (b.isOwn) return 1
     return (a.distance || Infinity) - (b.distance || Infinity)
   })
 
   // New: matching users first, then fill remaining slots with closest non-matching (greyed out)
-  const allUsers = [{ ...ownProfile, isOwn: true }, ...users.filter(u => u.id !== ownProfile.id)]
-  const matchingIds = new Set(filtered.map(u => u.id))
-  const nonMatching = allUsers.filter(u => !matchingIds.has(u.id)).sort((a, b) => {
+  const matchingIds = new Set(filteredGrid.map(u => u.id))
+  const nonMatchingGrid = visibleGridUsers.filter(u => !matchingIds.has(u.id)).sort((a, b) => {
     if (a.isOwn) return -1
     if (b.isOwn) return 1
     return (a.distance || Infinity) - (b.distance || Infinity)
   })
-  const sortedUsers = [...filtered, ...nonMatching]
+  const sortedUsers = [...filteredGrid, ...nonMatchingGrid]
 
-  const maxVisible = (gridRows + channelFollowUnlock) * 5 + 1
-  const hasMore = sortedUsers.length > maxVisible
+  // Debug count (include own profile)
+  // const nearbyCount = users.filter(u => u.id !== ownProfile.id).length
+  // const onlineCount = users.filter(u => u.id !== ownProfile.id && u.tgUsername !== '_test_' && isRecentlyActive(u)).length + 1 // +1 for self, exclude test users
 
   return (
     <div className="pb-20">
-      {/* Header */}
       <div className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
+        {/* LEFT: Logo + HKMOD + Raffle + Dot Matrix Timer */}
         <div className="flex items-center gap-2">
-          <img src={lmnLogo} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
-          <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
+          <img src={logoImg} alt="HKMOD" className="w-8 h-8 rounded-full object-cover" />
+          <h1 className="text-xl font-bold gradient-text tracking-tight">HKMOD</h1>
           <div className="w-px h-5 bg-[#2C2C2E] mx-0.5" />
-          <RaffleButton raffle={raffle} isAdmin={isAdmin} onBuy={onBuyTicket} onStartNext={onStartNext} lang={lang} />
+          {/* Prize Draw (Raffle) button */}
+          <RaffleButton
+            raffle={raffle}
+            isAdmin={isAdmin}
+            onBuyTicket={onBuyRaffleTicket}
+            onStartNextRaffle={onStartNextRaffle}
+            lang={lang}
+          />
+          {/* Dot matrix raffle status display */}
+          <RaffleStatusDisplay raffle={raffle} lang={lang} />
         </div>
+
+        {/* RIGHT: Test Users | Invisible | Unlock | Refresh | Language */}
         <div className="flex items-center gap-2">
-          <button onClick={cycleLang} className="text-[10px] font-bold text-[#FF6B35] px-2 py-1 rounded-full bg-[#FF6B35]/10 border border-[#FF6B35]/30 nav-press">
-            {getLangLabel(lang)}
+          {/* Admin: Show test users */}
+          {isAdmin && (
+            <button
+              onClick={() => setShowTestUsers(!showTestUsers)}
+              className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${showTestUsers ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'}`}
+              title={showTestUsers ? 'Hide Test Users' : 'Show Test Users'}
+            >
+              {showTestUsers ? '🧪' : '👤'}
+            </button>
+          )}
+
+          {/* Invisible mode toggle */}
+          <button
+            onClick={onToggleInvisible}
+            className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
+              isInvisible
+                ? 'bg-purple-500/30 text-purple-400 border-purple-500/40'
+                : invisiblePurchased
+                ? 'bg-purple-500/10 text-purple-500/60 border-purple-500/20'
+                : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
+            }`}
+            title={
+              isAdmin
+                ? (isInvisible ? 'Invisible ON (admin)' : 'Toggle Invisible (admin)')
+                : isInvisible
+                ? 'Invisible ON'
+                : invisiblePurchased
+                ? 'Invisible purchased — click to toggle'
+                : 'Purchase Invisible Mode (2000 ⭐)'
+            }
+          >
+            👁️‍🗨️
           </button>
-          <button onClick={onRefresh} className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press">
+
+          {/* Unlock profile lock — all users (admin free, others 100 Stars) */}
+          <button
+            onClick={onPromptUnlockProfile}
+            className="w-7 h-7 rounded-full bg-[#FF6B35]/20 border border-[#FF6B35]/30 flex items-center justify-center nav-press"
+            title={isAdmin ? 'Release Locks (Free)' : 'Unlock Profile (100 ⭐)'}
+          >
+            <span className="text-[10px]">🔓</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (Date.now() - lastRefreshTime < 5 * 60 * 1000) return
+              setLastRefreshTime(Date.now())
+              onRefresh()
+            }}
+            className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press"
+            title="Refresh"
+          >
             <RefreshCw className="w-3.5 h-3.5 text-[#8E8E93]" />
           </button>
-          {!profileUnlocked && (
-            <button onClick={onUnlockProfile}
-              className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#FF6B35]/30 flex items-center justify-center nav-press"
-              title="Unlock Profile (100 ⭐)">
-              <Unlock className="w-3.5 h-3.5 text-[#FF6B35]" />
-            </button>
-          )}
-          <button onClick={onToggleInvisible}
-            className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
-              isInvisible ? 'bg-purple-500/30 text-purple-400 border-purple-500/40' :
-              invisiblePurchased ? 'bg-purple-500/10 text-purple-500/60 border-purple-500/20' :
-              'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
-            }`} title="Invisible Mode">👁️‍🗨️</button>
+          <button
+            onClick={cycleLang}
+            className="text-[10px] font-bold text-[#FF6B35] px-2 py-1 rounded-full bg-[#FF6B35]/10 border border-[#FF6B35]/30 nav-press"
+          >
+            {getLangLabel(lang)}
+          </button>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* User stats bar — compact: total rows only, cycle unlock tips on tap */}
       <div className="px-3 pt-1 flex items-center gap-2 text-[10px] text-[#8E8E93]">
-        <span>{t(lang, 'nearby')}: {users.length}</span>
-        <span className="text-[#00D4AA]">{t(lang, 'active1h')}: {users.filter(u => isRecentlyActive(u.updatedAt)).length + 1}</span>
+        <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
-        <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : lang === 'ru' ? 'Разблокировано строк' : 'Rows'}: {gridRows + channelFollowUnlock}</span>
-        <span className="text-[#2C2C2E]">|</span>
-        <span className="text-[#8E8E93]" style={{ opacity: filtersUnlocked ? 1 : 0.4 }}>Purchased {filtersUnlocked ? '✅' : '❌'}</span>
-        <UnlockTip lang={lang} gridRows={gridRows} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
+        <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
+        <span className="ml-1 text-[#5AC8FA]">v15</span>
       </div>
 
-      {/* Filters */}
+      {showDbWarning && (
+        <div className="mx-3 mt-2 bg-[#FF6B35]/10 border border-[#FF6B35]/30 rounded-lg px-3 py-2 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-[#FF6B35] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[#FF6B35] text-xs font-semibold">{t(lang, 'dbNotConfigured')}</p>
+            <p className="text-[#8E8E93] text-[10px]">{t(lang, 'dbConfigHint')}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Filter bar: 6 buttons — 1.online 2.photos 3.role(🔒) 4.safe/raw 5.party 6.1on1 | host always open */}
       <div className="px-3 py-2">
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-          <button onClick={() => setOnlineOnly(!onlineOnly)}
-            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${onlineOnly ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+          {/* 1. Offline/Online toggle */}
+          <button
+            onClick={() => setOnlineOnly(!onlineOnly)}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${onlineOnly ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+          >
             <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${onlineOnly ? 'bg-[#00D4AA]' : 'bg-[#8E8E93]'}`} />
-            {onlineOnly ? t(lang, 'online') : t(lang, 'filterAll')}
+            {onlineOnly ? t(lang, 'onlineStatus') : t(lang, 'offlineStatus')}
           </button>
-          <button onClick={() => setPhotoOnly(!photoOnly)}
-            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoOnly ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-            {photoOnly ? t(lang, 'photo') : t(lang, 'any')}
+
+          {/* 2. No pic/Photos toggle */}
+          <button
+            onClick={() => setPhotoFilter(photoFilter === '有圖' ? '沒圖' : '有圖')}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoFilter === '有圖' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+          >
+            {photoFilter === '有圖' ? t(lang, 'hasPic') : t(lang, 'noPic')}
           </button>
+
+          {/* Divider */}
           <div className="w-px h-4 bg-[#2C2C2E] flex-shrink-0" />
 
-          {/* Sex filter */}
+          {/* 3. Role filter (🔒 until purchased) → All/Bottom/Versatile/Vers Bottom/Vers Top/Top/Side */}
           {isAdmin || filtersUnlocked ? (
-            <button onClick={cycleSex}
-              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${
-                sexFilter === 'Men' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
-                sexFilter === 'Women' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' :
-                'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
-              }`}>
-              {sexFilter || t(lang, 'filterAll')}
+            <button onClick={cycleRoleFilter}
+              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${getFilterColor(roleFilter)}`}
+            >
+              {roleFilter === 'All' ? t(lang, 'allRoles') : roleFilter}
             </button>
           ) : (
-            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+            <button onClick={onPromptUnlock}
+              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
+              title="Purchase filters to unlock"
+            >
+              🔒 {roleFilter}
+            </button>
           )}
 
-          {/* Age filter */}
+          {/* 4. Safe/Raw */}
           {isAdmin || filtersUnlocked ? (
-            <button onClick={cycleAge}
-              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
-              {t(lang, 'age' + ageFilter.charAt(0).toUpperCase() + ageFilter.slice(1)) || ageFilter}
+            <button onClick={cyclePref1Filter}
+              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${pref1Filter === 'Safe' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
+            >
+              {tPref(lang, pref1Filter)}
             </button>
           ) : (
-            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+            <button onClick={onPromptUnlock}
+              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
+            >
+              🔒 {tPref(lang, pref1Filter)}
+            </button>
           )}
 
-          {/* Zodiac filter */}
+          {/* 5. Party/Clean */}
+          <button onClick={isAdmin || filtersUnlocked ? cyclePref2Filter : cyclePartyPref2Filter}
+            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${pref2Filter === 'Clean' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}
+          >
+            {tPref(lang, pref2Filter)}
+          </button>
+
+          {/* 6. 1on1/Group */}
           {isAdmin || filtersUnlocked ? (
-            <button onClick={cycleZodiac}
-              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
-              {zodiacFilter ? getZodiacEmoji(zodiacFilter) : t(lang, 'zodiac')}
+            <button onClick={cyclePref3Filter}
+              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${pref3Filter === '1on1' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'}`}
+            >
+              {tPref(lang, pref3Filter)}
             </button>
           ) : (
-            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+            <button onClick={onPromptUnlock}
+              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
+            >
+              🔒 {tPref(lang, pref3Filter)}
+            </button>
           )}
 
-          {/* Activity filter */}
-          {isAdmin || filtersUnlocked ? (
-            <button onClick={cycleActivity}
-              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]">
-              {activityFilter ? (t(lang, 'seek' + activityFilter.replace(/\s/g, ''), 'lmn') || activityFilter) : t(lang, 'activity')}
+          {/* Host — always unlocked */}
+          <button onClick={cycleHostFilter}
+            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${hostFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93]' : hostFilter === 'Host' ? 'bg-indigo-500/20 text-indigo-400' : hostFilter === 'Travel' ? 'bg-cyan-500/20 text-cyan-400' : hostFilter === 'Outdoor' ? 'bg-lime-500/20 text-lime-400' : 'bg-amber-500/20 text-amber-400'}`}>
+            {hostFilter === 'All' ? t(lang, 'anywhere') : tPref(lang, hostFilter)}
+          </button>
+        </div>
+      </div>
+
+      <div className="px-3">
+        {isLoadingUsers && users.length === 0 && (
+          <div className="text-center py-8">
+            <div className="w-6 h-6 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <p className="text-[#8E8E93] text-xs">{t(lang, 'findingMembers')}</p>
+          </div>
+        )}
+
+{(() => {
+          const effectiveRows = gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
+          const unlockedSlots = effectiveRows * 5
+          const totalRealUsers = sortedUsers.length
+          const hasMoreUsers = totalRealUsers > unlockedSlots
+          
+          // Show all real users + pad to 100 with blanks
+          const displayUsers = [...sortedUsers]
+          while (displayUsers.length < 100) {
+            displayUsers.push({ id: `blank_${displayUsers.length}`, isBlank: true } as any)
+          }
+
+          return (
+            <>
+              {/* Main grid — all 100 slots, unlocked rows normal, locked rows greyed */}
+              <div className="grid grid-cols-5 gap-1.5">
+                {displayUsers.map((user, idx) => {
+                  const isAboveDivider = idx < unlockedSlots
+                  const isBlank = !!(user as any).isBlank
+                  const isMatching = !isBlank && matchingIds.has(user.id)
+                  
+                  if (isBlank) {
+                    return (
+                      <div
+                        key={(user as any).id}
+                        className="relative aspect-square rounded-lg bg-[#2C2C2E]/60 border border-[#3A3A3C]/40 flex items-center justify-center"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        <Users className="w-4 h-4 text-[#48484A]" />
+                      </div>
+                    )
+                  }
+                  
+                  return (
+                    <React.Fragment key={user.id}>
+              {/* Divider row — tap to unlock +1 row */}
+                      {idx === unlockedSlots && hasMoreUsers && (
+                        <div
+                          className="col-span-full flex items-center justify-center py-2 my-1 cursor-pointer select-none active:opacity-60 transition-opacity rounded-lg bg-gradient-to-r from-[#FF6B35]/10 to-purple-600/10 border border-[#FF6B35]/30"
+                          onClick={onPromptUnlock}
+                        >
+                          <span className="text-[10px] text-[#FF6B35] font-bold mr-2">🔒</span>
+                          <span className="text-[10px] text-[#FF6B35] font-semibold">
+                            {isAdmin ? 'Tap to unlock row (admin)' : 'Tap to unlock — 1000 ⭐'}
+                          </span>
+                          <span className="text-[9px] text-[#8E8E93] ml-2">({totalRealUsers - unlockedSlots} more)</span>
+                          <span className="mx-2 text-[10px] text-[#FF6B35] font-bold">🔒</span>
+                        </div>
+                      )}
+                      <div
+                        className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200"
+                        style={{
+                          borderColor: user.id === ownProfile.id ? '#FF6B35' : 'transparent',
+                          opacity: !isAboveDivider ? 0.3 : !isMatching ? 0.25 : 1,
+                          pointerEvents: !isAboveDivider ? 'none' : undefined,
+                        }}
+                      >
+                        <ProfileTile
+                          user={user}
+                          onClick={!isAboveDivider ? undefined : () => user.isOwn ? onViewOwnProfile() : onViewPhoto(user)}
+                        />
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+              </div>
+              
+              {/* Divider acts as unlock button — no separate button needed */}
+              
+              {/* Refresh button when all real users are unlocked */}
+              {!hasMoreUsers && (
+                <div className="mt-1.5 mx-0.5 select-none">
+                  <button
+                    className={`w-full rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all ${
+                      Date.now() - lastRefreshTime >= 5 * 60 * 1000
+                        ? 'bg-[#1A1A1A] border border-[#5AC8FA] text-[#5AC8FA] cursor-pointer active:scale-[0.98]'
+                        : 'bg-[#1A1A1A]/60 border border-[#2C2C2E] text-[#8E8E93] cursor-not-allowed'
+                    }`}
+                    onClick={() => {
+                      if (Date.now() - lastRefreshTime >= 5 * 60 * 1000) {
+                        setLastRefreshTime(Date.now());
+                        onRefresh();
+                      }
+                    }}
+                    disabled={Date.now() - lastRefreshTime < 5 * 60 * 1000}
+                  >
+                    {Date.now() - lastRefreshTime >= 5 * 60 * 1000 ? (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        <span className="text-[11px] font-medium">{lang === 'tc' ? '刷新' : lang === 'sc' ? '刷新' : 'Refresh'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[11px]">{'\u{1F551}'}</span>
+                        <span className="text-[11px] font-medium">{(() => { const s = Math.ceil((5 * 60 * 1000 - (Date.now() - lastRefreshTime)) / 1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}` })()}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </>
+          )
+        })()}
+      </div>
+
+      <div className="px-3 pt-2 flex items-center justify-between text-[10px] text-[#8E8E93]">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#00D4AA]" />{lang === 'en' ? 'Online' : lang === 'ru' ? 'Онлайн' : '在線'}</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#8E8E93]" />{t(lang, 'offlineStatus')}</span>
+        </div>
+        <span className="text-[#FF6B35]">{t(lang, 'youOrangeBorder')}</span>
+      </div>
+
+    </div>
+  )
+}
+
+// ─── 30-day lock helper ──────────────────────────────────────────────
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+function isPrefLocked(lastSavedAt: number, globalUnlockAt: number): boolean {
+  // Always unlocked: preference4 (Host/Travel), preference2 Party↔Party✓ transitions
+  // Locked if: saved within last 30 days AND no admin release after that save
+  if (lastSavedAt === 0) return false // Never saved = unlocked
+  if (globalUnlockAt >= lastSavedAt) return false // Admin released after user's last save
+  return Date.now() - lastSavedAt < THIRTY_DAYS_MS // Locked if saved < 30 days ago
+}
+
+// ─── Own Profile Screen with SAVE button ──────────────────────────────
+
+function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }: {
+  profile: UserProfile
+  onSave: (updated: UserProfile) => void
+  onBack: () => void
+  lang: Lang
+  editProfileUnlocked: boolean
+}) {
+  const [draft, setDraft] = useState<UserProfile>({ ...profile })
+  const [saved, setSaved] = useState(false)
+  const [photoIndex, setPhotoIndex] = useState(0)
+  const [photoLoaded, setPhotoLoaded] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState(0)
+  const [globalUnlockAt, setGlobalUnlockAt] = useState(0)
+
+  // Load last saved timestamp from storage + global unlock
+  useEffect(() => {
+    storageGetAll().then(result => {
+      // Migrate old month key to timestamp
+      const oldMonth = result?.[CLOUD.prefChangedAt]
+      const newTs = result?.[CLOUD.prefLockedAt]
+      if (newTs) {
+        setLastSavedAt(parseInt(newTs) || 0)
+      } else if (oldMonth && oldMonth.length >= 7) {
+        // Convert "2026-05" → timestamp of 1st of that month
+        const ts = new Date(`${oldMonth}-01T00:00:00Z`).getTime()
+        setLastSavedAt(ts)
+        // Also save in new format
+        storageSet(CLOUD.prefLockedAt, String(ts))
+      }
+    })
+    // Fetch global unlock timestamp from Supabase
+    fetchGlobalUnlock().then(ts => setGlobalUnlockAt(ts))
+  }, [])
+
+  useEffect(() => { setDraft({ ...profile }) }, [profile.id])
+
+  // Reset photo state when photo URL changes
+  useEffect(() => {
+    setPhotoLoaded(false)
+    setPhotoIndex(0)
+  }, [draft.tgPhotoUrl])
+
+  const updateDraft = (field: keyof UserProfile, value: unknown) => {
+    setDraft(prev => ({ ...prev, [field]: value }))
+    setSaved(false)
+  }
+
+  const togglePref = (field: 'preference1' | 'preference2' | 'preference3' | 'preference4', a: string, b: string, c?: string) => {
+    // If edit profile unlocked via ⭐ button, skip all locks
+    if (editProfileUnlocked) {
+      if (c) {
+        const current = draft[field]
+        if (current === a) updateDraft(field, b)
+        else if (current === b) updateDraft(field, c)
+        else updateDraft(field, a)
+      } else {
+        updateDraft(field, draft[field] === a ? b : a)
+      }
+      return
+    }
+    // preference4 is always unlocked (two-state: Host <-> Travel, no monthly lock)
+    if (field !== 'preference4') {
+      // preference2: unlocked = free 3-state cycle; locked = Party↔Party✓ only
+      if (field === 'preference2') {
+        const current = draft.preference2
+        const locked = isPrefLocked(lastSavedAt, globalUnlockAt)
+        const isParty = (current === 'Party' || current === 'Party✓')
+
+        if (locked && !isParty) {
+          // Already Clean while locked — shouldn't happen, but block
+          alert(`${lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? 'Нельзя менять 30 дней' : 'Can only change every 30 days'}`)
+          return
+        }
+
+        if (locked && isParty) {
+          // Locked + Party/Party✓ → only toggle between Party↔Party✓
+          updateDraft('preference2', current === 'Party' ? 'Party✓' : 'Party')
+          return
+        }
+
+        // Unlocked — full 3-state cycle Clean → Party → Party✓ → Clean
+        if (current === 'Clean') updateDraft('preference2', 'Party')
+        else if (current === 'Party') updateDraft('preference2', 'Party✓')
+        else updateDraft('preference2', 'Clean')
+        return
+      }
+      // Check 30-day lock for preference1, preference3, role, stats
+      if (isPrefLocked(lastSavedAt, globalUnlockAt)) {
+        const labels: Record<string, string> = { preference1: 'Safe/Raw', preference3: '1on1/Group' }
+        alert(`${labels[field]}: ${lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? 'Нельзя менять 30 дней' : 'Can only change every 30 days'}`)
+        return
+      }
+    }
+    if (c) {
+      // Three-state cycle: a -> b -> c -> a
+      const current = draft[field]
+      if (current === a) updateDraft(field, b)
+      else if (current === b) updateDraft(field, c)
+      else updateDraft(field, a)
+    } else {
+      updateDraft(field, draft[field] === a ? b : a)
+    }
+  }
+
+  const cyclePref4 = () => {
+    const order: Array<'Host' | 'Travel' | 'Outdoor' | 'Sauna'> = ['Host', 'Travel', 'Outdoor', 'Sauna']
+    const current = draft.preference4 || 'Travel'
+    const idx = order.indexOf(current)
+    updateDraft('preference4', order[(idx + 1) % order.length])
+  }
+
+  const handleSave = async () => {
+    // Validation: required fields must be filled
+    if (!draft.height || draft.height <= 0 || !draft.weight || draft.weight <= 0) {
+      alert(lang === 'tc' ? '請輸入身高和體重' : lang === 'sc' ? '请输入身高和体重' : lang === 'ru' ? 'Введите рост и вес' : 'Please enter height and weight')
+      return
+    }
+    if (!draft.isSide && (draft.position < 0 || draft.position > 1)) {
+      alert(lang === 'tc' ? '請選擇角色' : lang === 'sc' ? '请选择角色' : lang === 'ru' ? 'Выберите роль' : 'Please select a role')
+      return
+    }
+
+    // Saving profile locks ALL lockable fields for 30 days
+    const now = Date.now()
+    await storageSet(CLOUD.prefLockedAt, String(now))
+    setLastSavedAt(now)
+    await storageSet(CLOUD.height, String(draft.height))
+    await storageSet(CLOUD.weight, String(draft.weight))
+    await storageSet(CLOUD.position, String(draft.position))
+    await storageSet(CLOUD.isSide, String(draft.isSide))
+    await storageSet(CLOUD.pref1, draft.preference1 || 'Safe')
+    await storageSet(CLOUD.pref2, draft.preference2 || 'Clean')
+    await storageSet(CLOUD.pref3, draft.preference3 || '1on1')
+    await storageSet(CLOUD.pref4, draft.preference4 || 'Travel')
+    await storageSet(CLOUD.openMsg, String(draft.openToMessages || false))
+    onSave(draft)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const photos = draft.tgPhotos?.length ? draft.tgPhotos : (draft.tgPhotoUrl ? [draft.tgPhotoUrl] : [])
+  const currentPhoto = photos[photoIndex % photos.length]
+  const hasMultiplePhotos = photos.length > 1
+
+  return (
+    <div className="view-enter h-full flex flex-col">
+      {/* Fixed Header */}
+      <div className="shrink-0 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2.5 flex items-center justify-between z-10">
+        <button onClick={onBack} className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center nav-press">
+          <ArrowLeft className="w-4 h-4 text-white" />
+        </button>
+        <h2 className="text-base font-semibold text-white">{t(lang, 'editProfile')}</h2>
+        <div className="w-8" />
+      </div>
+
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto px-3 pt-3 pb-4">
+
+        {/* Photo + Stats Row */}
+        <div className="flex gap-3 mb-3">
+          <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A]">
+            {/* Placeholder always visible underneath */}
+            <div className="absolute inset-0 flex items-center justify-center z-0">
+              <span className="text-2xl font-bold text-[#8E8E93]">{draft.name.charAt(0)}</span>
+            </div>
+            {/* Image layered on top — click to rotate */}
+            {currentPhoto && (
+              <img
+                src={currentPhoto}
+                alt="You"
+                className={`absolute inset-0 w-full h-full object-cover z-10 ${photoLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300 active:opacity-70`}
+                referrerPolicy="no-referrer"
+                draggable={false}
+                loading="eager"
+                decoding="async"
+                onLoad={() => setPhotoLoaded(true)}
+                onError={() => setPhotoLoaded(false)}
+                onClick={() => hasMultiplePhotos && setPhotoIndex((prev) => (prev + 1) % photos.length)}
+              />
+            )}
+            {/* Photo counter badge */}
+            {hasMultiplePhotos && (
+              <div className="absolute top-0.5 right-0.5 bg-black/60 rounded-full px-1 py-0 z-20">
+                <span className="text-white text-[8px] font-bold">{photoIndex + 1}/{photos.length}</span>
+              </div>
+            )}
+            <div className="absolute bottom-0 left-0 right-0 bg-[#0088CC]/70 text-center py-0.5 z-20">
+              <span className="text-white text-[7px] font-bold uppercase">TG</span>
+            </div>
+          </div>
+
+          <div className="flex-1 flex flex-col justify-center gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-white font-bold text-base">{draft.name}</span>
+              {draft.isOnline && <span className="px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[9px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[#8E8E93]">
+              <span>{draft.height}cm</span><span className="text-[#2C2C2E]">|</span>
+              <span>{draft.weight}kg</span><span className="text-[#2C2C2E]">|</span>
+              <span className="text-[#FF6B35] font-bold">{formatRole(draft.position, draft.isSide)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => togglePref('preference1', 'Safe', 'Raw')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference1 === 'Safe' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? '🔒' : ''}{tPref(lang, draft.preference1 || 'Safe')}</button>
+              <button onClick={() => togglePref('preference2', 'Clean', 'Party', 'Party✓')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference2 === 'Clean' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? 'opacity-40 pointer-events-none' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? '🔒' : ''}{tPref(lang, draft.preference2 || 'Clean')}</button>
+              <button onClick={() => togglePref('preference3', '1on1', 'Group')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference3 === '1on1' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? '🔒' : ''}{tPref(lang, draft.preference3 || '1on1')}</button>
+              <button onClick={cyclePref4} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference4 === 'Host' ? 'bg-indigo-500/20 text-indigo-400' : draft.preference4 === 'Travel' ? 'bg-cyan-500/20 text-cyan-400' : draft.preference4 === 'Outdoor' ? 'bg-lime-500/20 text-lime-400' : 'bg-amber-500/20 text-amber-400'}`}>{tPref(lang, draft.preference4 || 'Travel')}</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-px bg-[#2C2C2E] mb-3" />
+
+        {/* Height & Weight — same row, monthly locked */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')} / {t(lang, 'weight')}</span>
+            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
+          </div>
+          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
+              <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')}</span>
+              <input type="number" value={draft.height || ''} placeholder="0"
+                onChange={(e) => updateDraft('height', parseInt(e.target.value) || 0)}
+                className="bg-transparent text-white text-sm font-medium text-right outline-none w-16" />
+            </div>
+            <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
+              <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'weight')}</span>
+              <input type="number" value={draft.weight || ''} placeholder="0"
+                onChange={(e) => updateDraft('weight', parseInt(e.target.value) || 0)}
+                className="bg-transparent text-white text-sm font-medium text-right outline-none w-16" />
+            </div>
+          </div>
+        </div>
+
+        <div className="h-px bg-[#2C2C2E] mb-3" />
+
+        {/* Role Section */}
+        <div className="space-y-2 mb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'role') || 'Role'}</span>
+            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
+          </div>
+          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+            <button onClick={() => updateDraft('isSide', false)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${!draft.isSide ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+              {formatRole(draft.position, false)}
             </button>
-          ) : (
-            <button onClick={onUnlockFilters} className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E] cursor-not-allowed">🔒</button>
+            <button onClick={() => updateDraft('isSide', true)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.isSide ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+              Side
+            </button>
+          </div>
+
+          {!draft.isSide && (
+            <div className={`space-y-1 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className="flex items-center justify-between text-[10px] text-[#8E8E93]">
+                <span>{t(lang, 'bottom0')}</span>
+                <span className="text-white font-bold text-xs">{draft.position.toFixed(1)}</span>
+                <span>{t(lang, 'top1')}</span>
+              </div>
+              <input type="range" min="0" max="1" step="0.1" value={draft.position}
+                onChange={(e) => updateDraft('position', parseFloat(e.target.value))}
+                className="w-full h-2 bg-[#2C2C2E] rounded-full appearance-none cursor-pointer"
+                style={{ accentColor: '#FF6B35' }} />
+              <div className="flex justify-between px-1">
+                {[0, 0.2, 0.4, 0.6, 0.8, 1].map(v => (
+                  <span key={v} className={`text-[8px] ${Math.abs(draft.position - v) < 0.05 ? 'text-[#FF6B35] font-bold' : 'text-[#8E8E93]'}`}>{v.toFixed(1)}</span>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="px-3 pt-1">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-5 gap-1">
-            {(() => {
-              // Row-based divider: all users in unlocked rows = normal, beyond = greyed out
-              const rowSize = 5
-              const unlockedSlots = (gridRows + channelFollowUnlock) * rowSize // no +1 — own profile already in list
-              const visibleUsers = sortedUsers.slice(0, maxVisible)
-              const showDivider = visibleUsers.length > unlockedSlots
-              return visibleUsers.map((u, idx) => {
-                const isAboveDivider = idx < unlockedSlots
-                return (
-                  <React.Fragment key={u.id}>
-                    {showDivider && idx === unlockedSlots && (
-                      <div className="col-span-5 py-1">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-px bg-[#2C2C2E]" />
-                          <span className="text-[9px] text-[#8E8E93] uppercase tracking-wider">{lang === 'tc' ? '其他用戶' : lang === 'sc' ? '其他用户' : 'Others'}</span>
-                          <div className="flex-1 h-px bg-[#2C2C2E]" />
-                        </div>
-                      </div>
-                    )}
-                    <div
-                      style={!isAboveDivider ? { opacity: 0.3, pointerEvents: 'none' } : undefined}
-                    >
-                      <ProfileTile user={u} onClick={() => u.isOwn ? onViewOwn() : onViewPhoto(u)} />
-                    </div>
-                  </React.Fragment>
-                )
-              })
-            })()}
+      {/* ─── FIXED SAVE BAR at bottom ─── */}
+      <div className="shrink-0 bg-[#0A0A0A]/95 backdrop-blur-xl border-t border-[#2C2C2E] px-3 pt-3 pb-5 z-20">
+        {saved && (
+          <div className="text-center text-[#00D4AA] text-xs font-semibold mb-2 animate-pulse">
+            {t(lang, 'saved')}
           </div>
         )}
-      </div>
-
-      {hasMore && (
-        <div className="px-3 py-3">
-          <button onClick={onUnlockFilters}
-            className="w-full h-10 rounded-xl border border-dashed border-[#FF6B35] bg-[#FF6B35]/5 text-[#FF6B35] text-xs font-semibold nav-press flex items-center justify-center gap-2">
-            <Lock className="w-3.5 h-3.5" />
-            {isAdmin ? 'Unlock more rows (Admin)' : 'Unlock more rows — 100 ⭐'}
+        {/* Only show Save when there are changes */}
+        {(draft.height !== profile.height || draft.weight !== profile.weight ||
+          draft.position !== profile.position || draft.isSide !== profile.isSide ||
+          draft.preference1 !== profile.preference1 || draft.preference2 !== profile.preference2 ||
+          draft.preference3 !== profile.preference3 || draft.preference4 !== profile.preference4) ? (
+          <button onClick={handleSave} className="w-full h-14 gradient-btn rounded-xl text-white font-bold text-lg nav-press flex items-center justify-center gap-2">
+            <Check className="w-6 h-6" />{t(lang, 'saveProfile')}
           </button>
+        ) : (
+          <button onClick={onBack} className="w-full h-12 bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl text-[#8E8E93] font-medium text-sm nav-press">
+            Back
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Dot Matrix Raffle Status Display ────────────────────────────────
+// LED marquee: cycles between message (5s) and countdown (5s).
+// Countdown targets 8pm next day (ends_at field).
+// Shows winner announcement when raffle is completed.
+
+function RaffleStatusDisplay({ raffle, lang }: { raffle: Raffle | null; lang: Lang }) {
+  const [timeLeft, setTimeLeft] = useState(0)
+  const [showCountdown, setShowCountdown] = useState(false)
+
+  // Countdown timer effect — targets raffle.ends_at (8pm next day)
+  useEffect(() => {
+    if (!raffle?.ends_at || raffle.status !== 'active') {
+      setTimeLeft(0)
+      return
+    }
+    const update = () => {
+      const end = new Date(raffle.ends_at!).getTime()
+      setTimeLeft(Math.max(0, end - Date.now()))
+    }
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [raffle?.ends_at, raffle?.status])
+
+  // Cycle: message marquee (5s) ↔ countdown (5s) only when active
+  useEffect(() => {
+    if (!raffle || raffle.status !== 'active') {
+      setShowCountdown(false)
+      return
+    }
+    const cycle = setInterval(() => {
+      setShowCountdown(prev => !prev)
+    }, 5000)
+    return () => clearInterval(cycle)
+  }, [raffle?.status])
+
+  // ── Build message text ──
+  let messageText = ''
+  let isRed = false
+
+  if (!raffle || raffle.status === 'completed') {
+    if (raffle?.winner_name) {
+      const prizeLabel = raffle.prize_type === 'filters' ? '🔓 FILTER' : '👁️ INVISIBLE'
+      messageText = `${t(lang, 'raffleWinnerCongrats')}: ${raffle.winner_name} — ${prizeLabel}`
+      isRed = false
+    } else {
+      messageText = t(lang, 'raffleNoDraws')
+      isRed = true
+    }
+  } else if (raffle.status === 'pending') {
+    const prizeLabel = raffle.prize_type === 'filters' ? '🔓 FILTER' : '👁️ INVISIBLE'
+    const price = raffle.ticket_price || 100
+    messageText = `${price}★ ${prizeLabel} — ${t(lang, 'raffleForSale')}`
+    isRed = false
+  } else if (raffle.status === 'active') {
+    const prizeLabel = raffle.prize_type === 'filters' ? '🔓 FILTER' : '👁️ INVISIBLE'
+    messageText = `${t(lang, 'raffleLive')} — ${prizeLabel}`
+    isRed = false
+  }
+
+  // ── Countdown text ──
+  const h = Math.floor(timeLeft / 3600000)
+  const m = Math.floor((timeLeft % 3600000) / 60000)
+  const s = Math.floor((timeLeft % 60000) / 1000)
+  const countdownText = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+
+  const neonColor = isRed ? '#FF4444' : '#00FF41'
+  const neonShadow = isRed
+    ? '0 0 4px #FF4444, 0 0 8px #FF4444'
+    : '0 0 4px #00FF41, 0 0 8px #00FF41, 0 0 12px #00CC33'
+  const borderColor = isRed ? 'rgba(255,68,68,0.35)' : 'rgba(0,255,65,0.3)'
+  const insetGlow = isRed
+    ? 'inset 0 0 8px rgba(255,68,68,0.15)'
+    : 'inset 0 0 8px rgba(0,255,65,0.15)'
+
+  const displayCountdown = raffle?.status === 'active' && showCountdown && timeLeft > 0
+
+  return (
+    <div
+      className="relative overflow-hidden rounded bg-black/85"
+      style={{
+        width: '90px',
+        height: '22px',
+        border: `1px solid ${borderColor}`,
+        boxShadow: `${insetGlow}, 0 0 4px ${borderColor}`,
+      }}
+    >
+      {/* ── Marquee message (scrolls R → L) ── */}
+      {!displayCountdown && (
+        <div className="absolute inset-0 flex items-center" style={{ overflow: 'hidden' }}>
+          <span
+            className="whitespace-nowrap text-[11px] font-bold tracking-wider absolute"
+            style={{
+              fontFamily: '"Courier New", "Consolas", monospace',
+              color: neonColor,
+              textShadow: neonShadow,
+              animation: 'marquee-scroll 4s linear infinite',
+            }}
+          >
+            {messageText}
+          </span>
+        </div>
+      )}
+
+      {/* ── Static countdown ── */}
+      {displayCountdown && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span
+            className="text-[11px] font-bold tracking-widest"
+            style={{
+              fontFamily: '"Courier New", "Consolas", monospace',
+              color: neonColor,
+              textShadow: neonShadow,
+            }}
+          >
+            {countdownText}
+          </span>
         </div>
       )}
     </div>
   )
 }
 
-// ─── Own Profile Screen ──────────────────────────────────────────────
+// ─── Raffle Button Component ─────────────────────────────────────────
 
-function OwnProfileScreen({ profile, onSave, onBack, lang, isAdmin, isInvisible, onToggleInvisible, profileUnlocked }: {
-  profile: UserProfile; onSave: (p: any) => void; onBack: () => void;
-  lang: Lang; isAdmin: boolean; isInvisible: boolean; onToggleInvisible: () => void;
-  profileUnlocked: boolean;
+function RaffleButton({
+  raffle,
+  isAdmin,
+  onBuyTicket,
+  onStartNextRaffle,
+  lang,
+}: {
+  raffle: Raffle | null
+  isAdmin: boolean
+  onBuyTicket: () => void
+  onStartNextRaffle: () => void
+  lang: Lang
 }) {
-  const [height, setHeight] = useState(String(profile.height || ''))
-  const [weight, setWeight] = useState(String(profile.weight || ''))
-  const [seekingToday, setSeekingToday] = useState(profile.seekingToday || 'Just Browsing')
-  const [meetupType, setMeetupType] = useState(profile.meetupType || '')
-  const [hideAge, setHideAge] = useState(false)
-  const [hasChanges, setHasChanges] = useState(false)
+  // No raffle active — greyed out, admin can click to auto-start next raffle
+  if (!raffle || raffle.status === 'completed') {
+    return (
+      <button
+        onClick={() => {
+          if (isAdmin) onStartNextRaffle()
+        }}
+        className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
+          isAdmin
+            ? 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E] hover:bg-yellow-500/10 hover:text-yellow-400 hover:border-yellow-500/30'
+            : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E] opacity-50'
+        }`}
+        title={isAdmin ? t(lang, 'raffleStartNext') : t(lang, 'raffleNoDraws')}
+      >
+        🎁
+      </button>
+    )
+  }
 
-  const zodiac = profile.dob ? getZodiac(profile.dob) : ''
-  const emoji = zodiac ? getZodiacEmoji(zodiac) : ''
-  const age = profile.dob ? getAge(profile.dob) : '?'
-  const canEdit = !profile.height || new Date().getDate() === 1 || isAdmin || profileUnlocked
+  // Pending raffle — show ticket count, clickable to buy
+  if (raffle.status === 'pending') {
+    const ticketInfo = `${raffle.current_tickets}/${raffle.target_tickets}`
+    return (
+      <button
+        onClick={onBuyTicket}
+        className="h-7 rounded-full flex items-center justify-center nav-press text-[10px] border px-1.5 gap-1 bg-yellow-500/20 text-yellow-400 border-yellow-500/40"
+        title={`${t(lang, 'raffleBuyTicket')} — ${ticketInfo}`}
+      >
+        🎁
+        <span className="text-[9px] font-bold">{ticketInfo}</span>
+      </button>
+    )
+  }
 
-  const changed = () => setHasChanges(true)
+  // Active raffle — pulsing, clickable to buy
+  const ticketInfo = `${raffle.current_tickets}/${raffle.target_tickets}`
+  return (
+    <button
+      onClick={onBuyTicket}
+      className="h-7 rounded-full flex items-center justify-center nav-press text-[10px] border px-1.5 gap-1 bg-gradient-to-r from-yellow-500/30 to-orange-500/30 text-yellow-300 border-yellow-500/40 animate-pulse"
+      title={`${t(lang, 'raffleBuyTicket')} — ${ticketInfo}`}
+    >
+      🎁
+      <span className="text-[9px] font-bold">{ticketInfo}</span>
+    </button>
+  )
+}
 
-  const handleSave = () => {
-    onSave({
-      height: parseInt(height) || profile.height,
-      weight: parseInt(weight) || profile.weight,
-      seeking_today: seekingToday,
-      meetup_type: meetupType,
-      hide_age_until: hideAge ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
+// ─── Flying Messages Overlay ─────────────────────────────────────────
+
+function FlyingMessagesOverlay({ messages, onDone }: { messages: {id: number; text: string; top: string}[]; onDone: (id: number) => void }) {
+  useEffect(() => {
+    messages.forEach(m => {
+      setTimeout(() => onDone(m.id), 60000) // remove after 60s
     })
-    setHasChanges(false)
+  }, [messages, onDone])
+
+  return (
+    <div className="fixed inset-0 z-[90] pointer-events-none overflow-hidden" aria-hidden="true">
+      {messages.map(m => (
+        <div
+          key={m.id}
+          className="flying-message absolute whitespace-nowrap text-sm font-bold text-white/90 drop-shadow-lg"
+          style={{ top: m.top }}
+        >
+          {m.text}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Bottom Nav ──────────────────────────────────────────────────────
+
+// ─── Bottom Nav ─────────────────────────────────────────────────────-
+
+function BottomNav({ lang, cooldownRemaining, onSend }: { lang: Lang; cooldownRemaining: number; onSend: (text: string) => void }) {
+  const [inputText, setInputText] = useState('')
+
+  const handleGroupChat = () => {
+    const url = 'https://t.me/HKMembersOnlyChat'
+    try {
+      const tg = getTg()
+      if (tg?.openTelegramLink) { tg.openTelegramLink(url); return }
+      if (tg?.openLink) { tg.openLink(url, { try_instant_view: false }); return }
+    } catch {}
+    window.open(url, '_blank')
+  }
+
+  const handleRefer = () => {
+    // Open Telegram native share dialog — user picks who to share with
+    const shareUrl = 'https://t.me/share/url?url=https://t.me/HKMO_D_Bot?startapp&text=Check%20out%20HKMOD%20-%20Hong%20Kong%20Members%20Only%20Dating!'
+    try {
+      const tg = getTg()
+      if (tg?.openTelegramLink) { tg.openTelegramLink(shareUrl); return }
+    } catch {}
+    window.open(shareUrl, '_blank')
+  }
+
+  const handleWallet = () => {
+    const tonUrl = 'https://t.me/wallet?startattach=transfer_UQD9Irrhhpj2aAa48W-XaL5q9vPD9Zf5UjXhC7aHcYcSnYo4'
+    try {
+      const tg = getTg()
+      if (tg?.openTelegramLink) { tg.openTelegramLink(tonUrl); return }
+    } catch {}
+    window.open(tonUrl, '_blank')
+  }
+
+  const handleSend = () => {
+    if (!inputText.trim() || cooldownRemaining > 0) return
+    const text = inputText.trim()
+    onSend(text) // trigger flying animation + Supabase store
+    setInputText('')
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] bg-[#0A0A0A]">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2C2C2E]">
-        <button onClick={onBack} className="flex items-center gap-1 text-[#8E8E93] text-sm nav-press">
-          <ArrowLeft className="w-4 h-4" /> Back
-        </button>
-        <span className="text-white font-semibold text-sm">Your Profile</span>
-        <div className="w-16" />
-      </div>
-
-      <div className="flex flex-col items-center px-4 py-5">
-        <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[#FF6B35] mb-3 bg-[#1A1A1A] flex items-center justify-center">
-          {profile.tgPhotoUrl ? (
-            <img src={profile.tgPhotoUrl} alt="" className="w-full h-full object-cover" />
-          ) : (
-            <span className="text-3xl font-bold text-[#8E8E93]">{profile.name.charAt(0)}</span>
-          )}
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-xl border-t border-[#2C2C2E]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div className="max-w-[min(520px,100vw)] mx-auto">
+        {/* Input row above bottom nav */}
+        <div className="flex items-center gap-2 px-3 py-2">
+          <input
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onFocus={(e) => { if (e.target.placeholder === '發送彈幕') e.target.placeholder = '' }}
+            onBlur={(e) => { if (!e.target.value) e.target.placeholder = '發送彈幕' }}
+            placeholder="發送彈幕"
+            className="flex-1 h-9 px-3 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] text-sm text-white placeholder-[#8E8E93] focus:outline-none focus:border-[#FF6B35]/50"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!inputText.trim()}
+            className="w-9 h-9 rounded-full bg-[#FF6B35] flex items-center justify-center nav-press disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <Send className="w-4 h-4 text-white" />
+          </button>
         </div>
-        <h2 className="text-white font-bold text-lg">{profile.name}</h2>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-2xl">{emoji}</span>
-          <span className="text-[#8E8E93] text-sm">{age} years old · {zodiac}</span>
-        </div>
-        <p className="text-[#8E8E93] text-xs mt-1">{profile.gender} seeking {profile.seekingGender}</p>
-      </div>
-
-      <div className="flex-1 px-4 pb-24 space-y-4">
-        {/* Invisible toggle */}
-        <button onClick={onToggleInvisible}
-          className={`w-full h-11 rounded-xl font-semibold text-sm nav-press flex items-center justify-center gap-2 ${
-            isInvisible ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
-          }`}>
-          {isInvisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          {isInvisible ? 'Invisible ON' : 'Invisible OFF'}
-        </button>
-
-        {/* Hide age */}
-        <button onClick={() => { setHideAge(!hideAge); changed() }}
-          className={`w-full h-11 rounded-xl font-semibold text-sm nav-press flex items-center justify-center gap-2 ${
-            hideAge ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'gradient-btn text-white'
-          }`}>
-          {hideAge ? '🔓 Age Hidden' : '🔒 Age Visible'}
-        </button>
-
-        {/* Height / Weight */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[#8E8E93] text-xs block mb-1">Height {!canEdit && '(locked)'}</label>
-            <input type="number" value={height} onChange={e => { setHeight(e.target.value); changed() }}
-              disabled={!canEdit} placeholder="cm"
-              className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm disabled:opacity-50" />
-          </div>
-          <div>
-            <label className="text-[#8E8E93] text-xs block mb-1">Weight {!canEdit && '(locked)'}</label>
-            <input type="number" value={weight} onChange={e => { setWeight(e.target.value); changed() }}
-              disabled={!canEdit} placeholder="kg"
-              className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm disabled:opacity-50" />
-          </div>
-        </div>
-
-        {/* Seeking Today */}
-        <div>
-          <label className="text-[#8E8E93] text-xs block mb-2">What I'm looking for today</label>
-          <div className="grid grid-cols-2 gap-2">
-            {SEEKING_TODAY_OPTS.map(o => (
-              <button key={o} onClick={() => { setSeekingToday(o); changed() }}
-                className={`h-10 rounded-lg text-xs font-medium nav-press ${
-                  seekingToday === o ? 'bg-[#FF6B35]/10 text-[#FF6B35] border-2 border-[#FF6B35]' : 'bg-[#1A1A1A] text-white border border-[#2C2C2E]'
-                }`}>
-                {t(lang, 'seek' + o.replace(/\s/g, ''), 'lmn') || o}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Meetup Type */}
-        {seekingToday === 'Meetup' && (
-          <div>
-            <label className="text-[#8E8E93] text-xs block mb-2">Meetup type</label>
-            <div className="grid grid-cols-3 gap-2">
-              {MEETUP_TYPES.map(m => (
-                <button key={m} onClick={() => { setMeetupType(m); changed() }}
-                  className={`h-10 rounded-lg text-[10px] font-medium nav-press ${
-                    meetupType === m ? 'bg-[#5AC8FA]/10 text-[#5AC8FA] border-2 border-[#5AC8FA]' : 'bg-[#1A1A1A] text-white border border-[#2C2C2E]'
-                  }`}>
-                  {t(lang, 'meet' + m.replace(/\s/g, '').replace('&', ''), 'lmn') || m}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <button onClick={handleSave} disabled={!hasChanges}
-          className={`w-full h-12 rounded-xl font-semibold text-sm nav-press ${
-            hasChanges ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
-          }`}>
-          Save
-        </button>
+        {/* Bottom nav buttons */}
+        <nav className="h-14 flex items-center justify-around">
+          <button className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+            <Grid3X3 className="w-5 h-5" />
+            <span className="text-[9px] font-medium">{t(lang, 'profiles')}</span>
+          </button>
+          <button onClick={handleGroupChat} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+            <Users className="w-5 h-5" />
+            <span className="text-[9px] font-medium">{t(lang, 'groupChat')}</span>
+          </button>
+          <button onClick={handleRefer} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+            <Gift className="w-5 h-5" />
+            <span className="text-[9px] font-medium">{t(lang, 'refer')}</span>
+          </button>
+          <button onClick={handleWallet} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+            <Wallet className="w-5 h-5" />
+            <span className="text-[9px] font-medium">{t(lang, 'wallet')}</span>
+          </button>
+        </nav>
       </div>
     </div>
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// APP
-// ══════════════════════════════════════════════════════════════════════
+// ─── App Component ───────────────────────────────────────────────────
 
 export default function App() {
   const [view, setView] = useState<View>('MAIN')
-  const [lang, setLang] = useState<Lang>('en')
+  const [showSplash, setShowSplash] = useState(true)
+  const [adminAction, setAdminAction] = useState<'release' | null>(null)
   const [ownProfile, setOwnProfile] = useState<UserProfile>({
-    id: 0, name: '', tgPhotoUrl: '', height: 0, weight: 0, lat: 0, lng: 0,
-    gender: '', seekingGender: '', dob: null, seekingToday: null, meetupType: null,
-    isOnline: false, isOwn: false, updatedAt: '', isInvisible: false, openToMessages: true, hideAgeUntil: null,
+    id: 'own', name: 'You', age: 0, height: 178, weight: 72,
+    position: 0.5, isSide: false, isOnline: true, distance: 0, isOwn: true,
+    preference1: 'Raw', preference2: 'Party', preference3: 'Group', preference4: 'Travel',
+    openToMessages: false, tgUsername: '', tgPhotoUrl: '', tgPhotos: [],
+    hasPhoto: false, hasRealPhoto: undefined,
+    isInvisible: false,
   })
   const [users, setUsers] = useState<UserProfile[]>([])
-  const [locGranted, setLocGranted] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [photoOverlay, setPhotoOverlay] = useState<UserProfile | null>(null)
+  const [locationGranted, setLocationGranted] = useState(false)
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [selectedPhoto, setSelectedPhoto] = useState<UserProfile | null>(null)
-  const [showAgeGate, setShowAgeGate] = useState(false)
-  const [showGenderSetup, setShowGenderSetup] = useState(false)
-  const [tempDob, setTempDob] = useState('')
-
-  // Splash + Disclaimer
-  const [showSplash, setShowSplash] = useState(true)
-  const [showDisclaimer, setShowDisclaimer] = useState(false)
-
-  // Premium
-  const [filtersUnlocked, setFiltersUnlocked] = useState(false)
-  const [gridRows, setGridRows] = useState(2)
-  const [channelFollowUnlock, setChannelFollowUnlock] = useState(0)
-  const [isInvisible, setIsInvisible] = useState(false)
-  const [invisiblePurchased, setInvisiblePurchased] = useState(false)
-  const [raffle, setRaffle] = useState<Raffle | null>(null)
-  const [profileUnlocked, setProfileUnlocked] = useState(false)
-
-  const tgUserRef = useRef<any>(null)
-
-  // ─── Init ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    const tg = getTg()
-    if (tg) {
-      tg.ready(); tg.expand()
-      const user = tg.initDataUnsafe?.user
-      if (user) {
-        tgUserRef.current = user
-        setIsAdmin(isAdminUser(user))
-        setOwnProfile(p => ({
-          ...p, id: user.id, name: user.first_name, tgPhotoUrl: user.photo_url || '',
-        }))
-
-        // Check if profile exists in DB
-        fetchUserUnlockStatus(user.id).then(status => {
-          if (status) {
-            setGridRows(status.grid_rows_unlocked || 2)
-            setFiltersUnlocked(!!status.filters_unlocked)
-            setProfileUnlocked(!!status.profile_unlocked)
-            if (status.invisible_until) {
-              const active = new Date(status.invisible_until).getTime() > Date.now()
-              setIsInvisible(active)
-              setInvisiblePurchased(true)
-            }
-          }
-          // Signal successful mount — hide loading screen if any
-          if (typeof window !== 'undefined' && (window as any).__lmnHideLoading) {
-            ;(window as any).__lmnHideLoading()
-          }
-        }).catch(err => {
-          console.error('[Init] fetchUserUnlockStatus failed:', err)
-          // Still hide loading on error
-          if (typeof window !== 'undefined' && (window as any).__lmnHideLoading) {
-            ;(window as any).__lmnHideLoading()
-          }
-        })
-      }
+  const [groupCheck, setGroupCheck] = useState<'checking' | 'member' | 'not_member'>('checking')
+  // Default language from Telegram, fallback to English
+  function getDefaultLang(): Lang {
+    try {
+      const code = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'en'
+      if (code === 'zh-hant' || code === 'zh-hk' || code === 'zh-tw') return 'tc'
+      if (code === 'zh-hans' || code === 'zh-cn') return 'sc'
+      if (code === 'ru') return 'ru'
+      return 'en'
+    } catch {
+      return 'en'
     }
+  }
+  const [lang, setLang] = useState<Lang>(getDefaultLang())
+  const [starsPaidFor, setStarsPaidFor] = useState<Set<string>>(new Set())
+  const [filtersUnlocked, setFiltersUnlocked] = useState(false)
+  const [editProfileUnlocked] = useState(false)
+  const [gridRowsUnlocked, setGridRowsUnlocked] = useState(0)
+  const [channelFollowUnlock, setChannelFollowUnlock] = useState(0)
+  const [isPremium, setIsPremium] = useState(false)
+  const [invisibleUntil, setInvisibleUntil] = useState<string | null>(null)
+  const [invisibleActive, setInvisibleActive] = useState(false)
+  const isInvisible = invisibleActive && (invisibleUntil ? new Date(invisibleUntil).getTime() > Date.now() : false)
+  const hasPurchasedInvisible = invisibleUntil !== null
+  const [raffle, setRaffle] = useState<Raffle | null>(null)
 
-    // Load channel follow unlock
-    storage.get('channelFollowed').then(v => {
-      if (v === '1') setChannelFollowUnlock(1)
-    })
-
-    // Check onboarding
-    Promise.all([
-      storage.get('dob'),
-      storage.get('gender'),
-      storage.get('seekingGender'),
-      storage.get('disclaimerAgreed'),
-    ]).then(([savedDob, savedGender, savedSeekingGender, disclaimerAgreed]) => {
-      if (!disclaimerAgreed) {
-        setShowDisclaimer(true)
-      } else if (!savedDob) {
-        setShowAgeGate(true)
-      } else {
-        setOwnProfile(p => ({ ...p, dob: savedDob }))
-        if (!savedGender) setShowGenderSetup(true)
-        else {
-          setOwnProfile(p => ({
-            ...p, gender: savedGender,
-            seekingGender: savedSeekingGender || '',
-          }))
-        }
-      }
-    })
-
-    storage.get('lang').then(l => { if (l) setLang(l as Lang) })
-    getActiveRaffle().then(r => setRaffle(r))
-
-    // Get location — try Telegram native first, then browser fallback
-    if (tg?.requestLocation) {
-      tg.requestLocation((location) => {
-        if (location) {
-          setOwnProfile(p => ({ ...p, lat: location.latitude, lng: location.longitude }))
-          setLocGranted(true)
-        } else {
-          // Telegram denied — try browser as fallback
-          navigator.geolocation?.getCurrentPosition(
-            (pos) => {
-              setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
-              setLocGranted(true)
-            },
-            () => setLocGranted(false),
-            { enableHighAccuracy: true, timeout: 15000 }
-          )
-        }
-      })
-    } else {
-      // No Telegram native API — use browser
-      navigator.geolocation?.getCurrentPosition(
-        (pos) => {
-          setOwnProfile(p => ({ ...p, lat: pos.coords.latitude, lng: pos.coords.longitude }))
-          setLocGranted(true)
-        },
-        () => setLocGranted(false),
-        { enableHighAccuracy: true, timeout: 15000 }
-      )
+  // Detect if user's avatar is a real photo or initials/emoji
+  // Telegram initials/emoji avatars are SVG; real photos are JPEG/PNG
+  const detectRealPhoto = useCallback(async (imageUrl: string): Promise<boolean> => {
+    if (!imageUrl) return false
+    // Fast path: URL suffix check
+    const lower = imageUrl.toLowerCase()
+    if (lower.endsWith('.svg')) return false // SVG = initials/emoji
+    if (lower.match(/\.(jpg|jpeg|png|gif|webp)$/)) return true // Raster = real photo
+    // Slow path: try HEAD request to check Content-Type
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 3000)
+      const res = await fetch(imageUrl, { method: 'HEAD', signal: ctrl.signal })
+      clearTimeout(timer)
+      const ct = res.headers.get('Content-Type') || ''
+      return ct.includes('image/jpeg') || ct.includes('image/png') || ct.includes('image/webp') || ct.includes('image/gif')
+    } catch {
+      // If all else fails, assume real photo (better to show than hide)
+      return true
     }
   }, [])
 
-  // ─── Heartbeat ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!locGranted) return
-    const uid = tgUserRef.current?.id
-    if (!uid) return
-    const ping = () => setOnlineStatus(uid, true).catch(console.error)
-    ping()
-    const iv = setInterval(ping, 30000)
-    return () => clearInterval(iv)
-  }, [locGranted])
+  // Flying messages: shared across all users via Supabase
+  const [flyingMessages, setFlyingMessages] = useState<{id: number; text: string; top: string}[]>([])
+  const lastFlyingSendRef = useRef(0) // 1 min cooldown per user
 
-  // ─── Refresh ───────────────────────────────────────────────────────
-  const handleRefresh = useCallback(() => {
-    if (!ownProfile.lat || !ownProfile.lng) return
-    setIsLoading(true)
-    fetchNearby(ownProfile.lat, ownProfile.lng).then(dbUsers => {
-      const myId = ownProfile.id
-      const mapped = dbUsers.filter(u => u.id !== myId).map(u => {
-        const p = dbToProfile(u, myId)
-        p.distance = haversineKm(ownProfile.lat, ownProfile.lng, u.lat || 0, u.lng || 0)
-        return p
-      })
-      setUsers(mapped)
-      setIsLoading(false)
-    }).catch(err => {
-      console.error('Refresh error:', err)
-      setIsLoading(false)
-    })
-  }, [ownProfile.lat, ownProfile.lng, ownProfile.id])
 
-  useEffect(() => {
-    if (!locGranted || !ownProfile.lat || !ownProfile.lng) return
-    handleRefresh()
-    const iv = setInterval(handleRefresh, 300000)
-    return () => clearInterval(iv)
-  }, [locGranted, ownProfile.lat, ownProfile.lng, handleRefresh])
+  // "Show More Users" button → unlock +1 grid row (5 users)
+  // Admin skips payment, regular users pay 1000 Stars
 
-  // ─── Save profile ──────────────────────────────────────────────────
-  const handleSaveProfile = useCallback((updates: any) => {
-    const uid = tgUserRef.current?.id
-    if (!uid) return
-    const data = {
-      id: uid,
-      name: ownProfile.name,
-      photo_url: ownProfile.tgPhotoUrl || null,
-      height: updates.height ?? ownProfile.height,
-      weight: updates.weight ?? ownProfile.weight,
-      gender: ownProfile.gender,
-      seeking_gender: ownProfile.seekingGender,
-      dob: ownProfile.dob,
-      seeking_today: updates.seeking_today ?? ownProfile.seekingToday,
-      meetup_type: updates.meetup_type ?? ownProfile.meetupType,
-      lat: ownProfile.lat,
-      lng: ownProfile.lng,
-      is_online: true,
-      updated_at: new Date().toISOString(),
-      hide_age_until: updates.hide_age_until ?? ownProfile.hideAgeUntil,
-    }
-    upsertUser(data).then((result) => {
-      setOwnProfile(p => ({ ...p, ...updates }))
-      // Auto 7-day filter unlock for new users
-      if (result && !result.filters_unlocked_expires_at) {
-        ensureFilterUnlock(result.id).then(ok => {
-          console.log('Auto filter unlock:', ok ? 'set 7 days' : 'failed')
-        })
-      }
-    }).catch(console.error)
-  }, [ownProfile])
-
-  // ─── Disclaimer ───────────────────────────────────────────────────
-  const handleDisclaimerAgree = () => {
-    storage.set('disclaimerAgreed', 'true')
-    setShowDisclaimer(false)
-    // Continue to next onboarding step
-    Promise.all([storage.get('dob'), storage.get('gender')]).then(([savedDob, savedGender]) => {
-      if (!savedDob) setShowAgeGate(true)
-      else if (!savedGender) setShowGenderSetup(true)
-    })
-  }
-
-  // ─── Onboarding ────────────────────────────────────────────────────
-  const handleAgeConfirm = (dob: string) => {
-    storage.set('dob', dob)
-    setOwnProfile(p => ({ ...p, dob }))
-    setTempDob(dob)
-    setShowAgeGate(false)
-    setShowGenderSetup(true)
-  }
-
-  const handleGenderComplete = (gender: string, seeking: string) => {
-    storage.set('gender', gender)
-    storage.set('seekingGender', seeking)
-    setOwnProfile(p => ({ ...p, gender, seekingGender: seeking }))
-    setShowGenderSetup(false)
-    // Save to DB immediately
-    const uid = tgUserRef.current?.id
-    if (uid) {
-      upsertUser({
-        id: uid, name: ownProfile.name, photo_url: ownProfile.tgPhotoUrl || null,
-        gender, seeking_gender: seeking, dob: tempDob || ownProfile.dob,
-        lat: ownProfile.lat, lng: ownProfile.lng,
-        is_online: true, updated_at: new Date().toISOString(),
-      })
-    }
-  }
-
-  // ─── Invisible ─────────────────────────────────────────────────────
-  const handleToggleInvisible = useCallback(() => {
-    if (!invisiblePurchased && !isAdmin) {
-      alert('Purchase Invisible Mode (2000 ⭐)')
-      return
-    }
-    const uid = tgUserRef.current?.id
-    if (!uid) return
-    const newState = !isInvisible
-    const until = newState ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null
-    upsertUser({ id: uid, invisible_until: until }).then(() => {
-      setIsInvisible(newState)
-    })
-  }, [isInvisible, invisiblePurchased, isAdmin])
-
-  // ─── Channel Follow Unlock — +1 row for following @LetsMeetNowApp ──
-  const handleClaimChannelFollow = useCallback(async () => {
-    if (channelFollowUnlock) return
-    const url = 'https://t.me/LetsMeetNowApp'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(url) }
-      else if (tg?.openLink) { tg.openLink(url) }
-      else { window.open(url, '_blank') }
-    } catch {}
-    setChannelFollowUnlock(1)
-    storage.set('channelFollowed', '1')
-  }, [channelFollowUnlock])
-
-  // ─── Unlock profile (100 ⭐ one-off) ─────────────────────────────
-  const handleUnlockProfile = useCallback(async () => {
-    const uid = tgUserRef.current?.id
-    if (!uid) return
-
+  // ─── Unlock Profile Lock — 100 Stars for non-admin ─────────────────
+  const promptUnlockProfile = useCallback(async () => {
     if (isAdmin) {
-      await upsertUser({ id: uid, profile_unlocked: true })
-      setProfileUnlocked(true)
+      setAdminAction('release')
       return
     }
-
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
+    if (!userId) return
     try {
-      const tg = getTg() as any
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8000)
+      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: uid, amount: 100, purpose: 'profile' }),
+        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'edit' }),
+        signal: ctrl.signal,
       })
+      clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status: string) => {
+      if (data.ok && data.invoice_url && tg?.openInvoice) {
+        tg.openInvoice(data.invoice_url, async (status) => {
           if (status === 'paid') {
-            await upsertUser({ id: uid, profile_unlocked: true })
-            setProfileUnlocked(true)
+            await storageSet(CLOUD.prefLockedAt, '0')
+            alert('Profile lock released! Refresh to apply.')
+            window.location.reload()
           }
         })
       }
-    } catch (e) { console.error('Profile unlock failed:', e) }
+    } catch { /* Worker failed */ }
   }, [isAdmin])
-  const handleUnlockFilters = useCallback(async () => {
-    const uid = tgUserRef.current?.id
-    if (!uid) return
 
-    // Admin: free row unlock (+1)
-    if (isAdmin) {
-      try {
-        const newRows = gridRows + 1
-        await upsertUser({ id: uid, grid_rows_unlocked: newRows })
-        setGridRows(newRows)
-      } catch (e) { console.error('Admin unlock failed:', e) }
+  // ─── Raffle (Prize Draw) handlers ──────────────────────────────────
+
+  const handleBuyRaffleTicket = useCallback(async () => {
+    if (!raffle || raffle.status === 'completed') return
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
+    if (!userId) return
+
+    // Check if raffle has already ended (deadline passed)
+    if (raffle.status === 'active' && raffle.ends_at && new Date(raffle.ends_at).getTime() <= Date.now()) {
+      // Draw winner
+      const winner = await drawRaffleWinner(raffle.id)
+      if (winner) {
+        await completeRaffle(raffle.id, winner.user_id, winner.name)
+        // Apply prize to winner
+        if (raffle.prize_type === 'invisible') {
+          const until = new Date(Date.now() + 30 * 86400000).toISOString()
+          await updateInvisibleStatus(winner.user_id, until)
+        }
+      }
+      const final = await getActiveRaffle()
+      setRaffle(final || null)
       return
     }
-
-    // Regular user: Stars payment
-    try {
-      const tg = getTg() as any
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: uid, amount: 1000, purpose: 'unlock_rows' }),
-      })
-      const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status: string) => {
-          if (status === 'paid') {
-            const newRows = gridRows + 1
-            await upsertUser({ id: uid, grid_rows_unlocked: newRows })
-            setGridRows(newRows)
-          }
-        })
-      }
-    } catch (e) { console.error('Invoice failed:', e) }
-  }, [isAdmin, gridRows])
-
-  // ─── Raffle ────────────────────────────────────────────────────────
-  const handleBuyTicket = useCallback(async () => {
-    const uid = tgUserRef.current?.id
-    const name = tgUserRef.current?.first_name
-    if (!uid || !name) return
 
     // Admin gets free ticket
     if (isAdmin) {
-      const ok = await buyRaffleTicket(uid, name)
+      const ok = await buyRaffleTicket(raffle.id, userId)
       if (ok) {
         const updated = await getActiveRaffle()
         if (updated) {
           setRaffle(updated)
-          if (updated.tickets_sold > 10 && updated.status === 'waiting') {
+          // Auto-start countdown when >10 tickets reached, draw on next Wednesday
+          if (updated.current_tickets > 10 && updated.status === 'pending') {
+            await startRaffleCountdown(updated.id)
             await setRaffleDrawToNextWednesday(updated.id)
             const final = await getActiveRaffle()
             if (final) setRaffle(final)
@@ -1215,24 +1889,28 @@ export default function App() {
       return
     }
 
-    // Regular user: Stars payment (50 ⭐ per ticket)
+    // Regular user: Stars payment
     try {
-      const tg = getTg() as any
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8000)
+      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: uid, amount: 50, purpose: 'raffle' }),
+        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'raffle' }),
+        signal: ctrl.signal,
       })
+      clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status: string) => {
+      if (data.ok && data.invoice_url && tg?.openInvoice) {
+        tg.openInvoice(data.invoice_url, async (status) => {
           if (status === 'paid') {
-            const ok = await buyRaffleTicket(uid, name)
+            const ok = await buyRaffleTicket(raffle.id, userId)
             if (ok) {
               const updated = await getActiveRaffle()
               if (updated) {
                 setRaffle(updated)
-                if (updated.tickets_sold > 10 && updated.status === 'waiting') {
+                if (updated.current_tickets > 10 && updated.status === 'pending') {
+                  await startRaffleCountdown(updated.id)
                   await setRaffleDrawToNextWednesday(updated.id)
                   const final = await getActiveRaffle()
                   if (final) setRaffle(final)
@@ -1242,34 +1920,28 @@ export default function App() {
           }
         })
       }
-    } catch (e) { console.error('Raffle ticket purchase failed:', e) }
-  }, [isAdmin, gridRows])
+    } catch { /* Worker failed */ }
+  }, [raffle, isAdmin])
 
   const handleStartNextRaffle = useCallback(async () => {
     if (!isAdmin) return
-    try {
-      console.log('[Raffle] Admin creating raffle...')
-      const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
-      const newRaffle = await createRaffle(nextType)
-      console.log('[Raffle] Created:', newRaffle)
-      if (newRaffle) setRaffle(newRaffle)
-    } catch (err) {
-      console.error('[Raffle] createRaffle failed:', err)
-      alert('Failed to start raffle. Check console.')
-    }
+    // Auto-alternate: if last raffle was invisible (or none), start filters next
+    const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
+    const newRaffle = await createRaffle(nextType)
+    if (newRaffle) setRaffle(newRaffle)
   }, [isAdmin, raffle])
 
-  // Poll raffle to check if deadline reached — auto-draw winner
+  // Poll active raffle to check if deadline reached — auto-draw winner
   useEffect(() => {
-    if (!raffle || !raffle.ends_at) return
+    if (!raffle || raffle.status !== 'active' || !raffle.ends_at) return
     const checkDeadline = async () => {
       if (new Date(raffle.ends_at!).getTime() <= Date.now()) {
         const winner = await drawRaffleWinner(raffle.id)
         if (winner) {
-          // If prize is invisible, update winner's invisible_until
+          await completeRaffle(raffle.id, winner.user_id, winner.name)
           if (raffle.prize_type === 'invisible') {
             const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            await upsertUser({ id: winner.id, invisible_until: until })
+            await updateInvisibleStatus(winner.user_id, until)
           }
         }
         const final = await getActiveRaffle()
@@ -1278,87 +1950,759 @@ export default function App() {
     }
     const interval = setInterval(checkDeadline, 30000) // Check every 30s
     return () => clearInterval(interval)
-  }, [raffle?.ends_at, raffle?.id, raffle?.prize_type])
+  }, [raffle?.status, raffle?.ends_at, raffle?.id, raffle?.prize_type])
 
-  // ─── Splash done ────────────────────────────────────────────────────
-  const handleSplashDone = () => {
-    setShowSplash(false)
+  const promptUnlock = async () => {
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
+    // Admin bypass: skip Stars payment, unlock directly
+    if (isAdmin) {
+      const newRows = gridRowsUnlocked + 1
+      setGridRowsUnlocked(newRows)
+      storageSet(CLOUD.gridRowsUnlocked, String(newRows))
+      storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      if (userId) {
+        await saveGridRowsUnlocked(userId, newRows)
+      }
+      return
+    }
+    if (!userId) return
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8000)
+      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, amount: 1000, purpose: 'grid' }),
+        signal: ctrl.signal,
+      })
+      clearTimeout(timer)
+      const data = await res.json()
+      if (data.ok && data.invoice_url && tg?.openInvoice) {
+        tg.openInvoice(data.invoice_url, async (status) => {
+          if (status === 'paid') {
+            const newRows = gridRowsUnlocked + 1
+            setGridRowsUnlocked(newRows)
+            storageSet(CLOUD.gridRowsUnlocked, String(newRows))
+            storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+            await saveGridRowsUnlocked(userId, newRows)
+          }
+        })
+      }
+    } catch { /* Worker failed, silently ignore */ }
   }
 
-  // ─── Render ───────────────────────────────────────────────────────
-  if (showSplash) return <SplashScreen onDone={handleSplashDone} />
-  if (showDisclaimer) return <DisclaimerModal onAgree={handleDisclaimerAgree} lang={lang} />
-  if (showAgeGate) return <AgeGate onConfirm={handleAgeConfirm} lang={lang} />
-  if (showGenderSetup) return <GenderSetup onComplete={handleGenderComplete} lang={lang} />
-  if (!locGranted) {
-    return (
-      <div className="fixed inset-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center px-6">
-        <div className="w-16 h-16 rounded-full bg-[#FF6B35]/10 flex items-center justify-center mb-4">
-          <LocateFixed className="w-8 h-8 text-[#FF6B35]" />
-        </div>
-        <h2 className="text-xl font-bold text-white mb-2">Location Required</h2>
-        <p className="text-[#8E8E93] text-sm text-center mb-6">We need your location to show people nearby.</p>
-        <button onClick={() => {
-          const tg2 = getTg()
-          const onGranted = (lat: number, lng: number) => {
-            setOwnProfile(p => ({ ...p, lat, lng }))
-            setLocGranted(true)
+  // ─── Channel Follow Unlock — +1 row for following @HKMO_D ─────────
+  const handleClaimChannelFollow = useCallback(async () => {
+    if (channelFollowUnlock) return
+    // Open the channel
+    const url = 'https://t.me/HKMO_D'
+    try {
+      const tg = getTg()
+      if (tg?.openTelegramLink) { tg.openTelegramLink(url) }
+      else if (tg?.openLink) { tg.openLink(url, { try_instant_view: false }) }
+      else { window.open(url, '_blank') }
+    } catch {}
+    // Give the unlock immediately (we trust the user - it's a one-time thing)
+    setChannelFollowUnlock(1)
+    cloudSet(CLOUD.channelFollowed, '1')
+  }, [channelFollowUnlock])
+
+  // Invisible mode payment — 2000 Stars for 30 days
+  // Admin gets it free
+  const promptInvisiblePayment = async () => {
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
+    if (!userId) return
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8000)
+      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, amount: 2000, purpose: 'invisible' }),
+        signal: ctrl.signal,
+      })
+      clearTimeout(timer)
+      const data = await res.json()
+      if (data.ok && data.invoice_url && tg?.openInvoice) {
+        tg.openInvoice(data.invoice_url, (status) => {
+          if (status === 'paid') {
+            const until = new Date(Date.now() + 30 * 86400000).toISOString()
+            setInvisibleUntil(until)
+            setInvisibleActive(true)
+            storageSet(CLOUD.invisibleActive, 'true')
+            updateInvisibleStatus(userId, until)
           }
-          const onDenied = () => alert(t(lang, 'permissionDenied') || 'Permission denied. Please enable location.')
-          if (tg2?.requestLocation) {
-            tg2.requestLocation((location) => {
-              if (location) onGranted(location.latitude, location.longitude)
-              else {
-                navigator.geolocation?.getCurrentPosition(
-                  (pos) => onGranted(pos.coords.latitude, pos.coords.longitude),
-                  onDenied,
-                  { enableHighAccuracy: true, timeout: 10000 }
-                )
-              }
-            })
+        })
+      }
+    } catch { /* Worker failed, silently ignore */ }
+  }
+
+  const tgUserId = useRef<number | null>(null)
+
+  // Splash screen: auto-dismiss after 2.5s
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 2500)
+    return () => clearTimeout(timer)
+  }, [])
+  // ─── Group membership check ───────────────────────────────────────
+  useEffect(() => {
+    const tg = getTg()
+    const inTg = isInTelegram()
+    const user = tg?.initDataUnsafe?.user
+
+    console.log('=== HKMOD Check === inTelegram:', inTg)
+
+    // Admin bypass FIRST — always allow admins even outside Telegram
+    if (isAdminUser(user)) {
+      console.log('  result: ADMIN BYPASS')
+      setGroupCheck('member')
+      return
+    }
+
+    // Must be inside Telegram WebApp (profiles need Telegram user data)
+    if (!inTg || !tg) {
+      console.log('  result: NOT in Telegram')
+      setGroupCheck('not_member')
+      return
+    }
+
+    // Any Telegram user can access (app is shared in group)
+    console.log('  result: PASSED - Telegram user')
+    setGroupCheck('member')
+  }, [])
+
+  // ─── Init: Load Telegram user + saved data ─────────────────────────
+  useEffect(() => {
+    const tg = getTg()
+    const inTg = isInTelegram()
+    console.log('=== HKMOD Init === inTelegram:', inTg, 'WebApp:', !!tg)
+
+    if (tg) {
+      tg.ready()
+      tg.expand()
+      tg.setHeaderColor('#0A0A0A')
+
+      const user = tg.initDataUnsafe?.user
+      console.log('TG user:', user ? { id: user.id, name: user.first_name, photo_url: user.photo_url?.substring(0, 50) } : 'none')
+
+      if (user) {
+        tgUserId.current = user.id
+        setIsPremium(!!user.is_premium)
+        const adminCheck = isAdminUser(user)
+        console.log(`Admin check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
+        setIsAdmin(adminCheck)
+        const photoUrl = user.photo_url || ''
+        setOwnProfile(prev => ({
+          ...prev,
+          id: String(user.id),
+          name: user.first_name || prev.name,
+          tgUsername: user.username || prev.tgUsername,
+          tgPhotoUrl: photoUrl || prev.tgPhotoUrl,
+          tgPhotos: photoUrl ? [photoUrl] : prev.tgPhotos,
+          hasPhoto: (!!photoUrl && photoUrl.startsWith('http')) || prev.hasPhoto,
+        }))
+        // Save photo_url to CloudStorage (it expires after ~1hr!)
+        if (photoUrl) {
+          storageSet(CLOUD.photoUrl, photoUrl)
+        }
+        // Photo gate: check if user has a real photo on every login
+        const runPhotoCheck = async () => {
+          const uid = tgUserId.current
+          if (!uid) return
+          const isRealNow = checkRealPhoto(photoUrl)
+          const dbStatus = await fetchUserPhotoStatus(uid)
+          if (dbStatus) {
+            // If photo was real before but not now -> relock (background, no UI block)
+            if (dbStatus.has_real_photo && !isRealNow) {
+              console.log('[PhotoGate] Photo removed, relocking features')
+              await relockUserFeatures(uid)
+              await updateRealPhotoStatus(uid, false)
+            } else if (!dbStatus.has_real_photo && isRealNow) {
+              // New real photo detected
+              await updateRealPhotoStatus(uid, true)
+            }
+            // If was real and still real -> no change
           } else {
-            navigator.geolocation?.getCurrentPosition(
-              (pos) => onGranted(pos.coords.latitude, pos.coords.longitude),
-              onDenied,
-              { enableHighAccuracy: true, timeout: 10000 }
-            )
+            // No DB record -> first time
+            await updateRealPhotoStatus(uid, isRealNow)
           }
-        }} className="w-full max-w-sm h-12 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center justify-center gap-2">
-          <LocateFixed className="w-4 h-4" /> Grant Location
-        </button>
+          // Also update the local profile
+          setOwnProfile(prev => ({ ...prev, hasRealPhoto: isRealNow }))
+        }
+        runPhotoCheck()
+        // Legacy: also run detectRealPhoto for hasRealPhoto UI state
+        detectRealPhoto(photoUrl).then(isReal => {
+          setOwnProfile(prev => ({ ...prev, hasRealPhoto: isReal }))
+        })
+        if (user.first_name) {
+          storageSet(CLOUD.name, user.first_name)
+        }
+      }
+    }
+
+    // Load saved data (including backup photo_url)
+    storageGetAll().then(result => {
+      if (!result || Object.keys(result).length === 0) return
+      console.log('Storage loaded keys:', Object.keys(result))
+
+      const loaded: Partial<UserProfile> = {}
+      // Load photo_url backup if Telegram one expired
+      const savedPhoto = result[CLOUD.photoUrl]
+      if (savedPhoto && savedPhoto.trim() !== '') {
+        loaded.tgPhotoUrl = savedPhoto
+        loaded.tgPhotos = [savedPhoto]
+      }
+      // Load name backup
+      const savedName = result[CLOUD.name]
+      if (savedName && savedName.trim() !== '') loaded.name = savedName
+
+      const hVal = result[CLOUD.height]
+      if (hVal && hVal.trim() !== '') { const p = parseInt(hVal); if (!isNaN(p) && p > 0) loaded.height = p }
+      const wVal = result[CLOUD.weight]
+      if (wVal && wVal.trim() !== '') { const p = parseInt(wVal); if (!isNaN(p) && p > 0) loaded.weight = p }
+      const pVal = result[CLOUD.position]
+      if (pVal && pVal.trim() !== '') { const p = parseFloat(pVal); if (!isNaN(p)) loaded.position = p }
+      loaded.isSide = result[CLOUD.isSide] === 'true'
+      if (result[CLOUD.pref1]) loaded.preference1 = result[CLOUD.pref1] as 'Safe' | 'Raw'
+      if (result[CLOUD.pref2]) loaded.preference2 = result[CLOUD.pref2] as 'Clean' | 'Party' | 'Party✓'
+      if (result[CLOUD.pref3]) loaded.preference3 = result[CLOUD.pref3] as '1on1' | 'Group'
+      if (result[CLOUD.pref4]) {
+        const p4 = result[CLOUD.pref4]
+        // Migrate old 'Off' value to 'Travel'
+        loaded.preference4 = (p4 === 'Off' ? 'Travel' : p4) as 'Host' | 'Travel' | 'Outdoor' | 'Sauna'
+      }
+      loaded.openToMessages = result[CLOUD.openMsg] === 'true'
+      if (result[CLOUD.lang]) setLang(result[CLOUD.lang] as Lang)
+
+      // Check if grid filters are unlocked (from gift/deep link), with 30-day expiry
+      const tg2 = getTg()
+      const startParam = tg2?.initDataUnsafe?.start_param
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+      const unlockedAt = parseInt(result[CLOUD.filtersUnlockedAt] || '0')
+      const now = Date.now()
+      const isExpired = unlockedAt > 0 && (now - unlockedAt) > THIRTY_DAYS_MS
+      
+      if (!isExpired && (startParam === 'unlocked' || result[CLOUD.filtersUnlocked] === 'true')) {
+        setFiltersUnlocked(true)
+        if (startParam === 'unlocked') {
+          storageSet(CLOUD.filtersUnlocked, 'true')
+          storageSet(CLOUD.filtersUnlockedAt, String(now))
+        }
+      } else if (isExpired) {
+        // Expired — clear unlock
+        storageSet(CLOUD.filtersUnlocked, '')
+        storageSet(CLOUD.filtersUnlockedAt, '')
+        setFiltersUnlocked(false)
+      }
+      // Load saved grid rows unlocked
+      const savedGridRows = result[CLOUD.gridRowsUnlocked]
+      if (savedGridRows) {
+        const parsed = parseInt(savedGridRows)
+        if (!isNaN(parsed) && parsed > 0) {
+          setGridRowsUnlocked(parsed)
+        }
+      }
+      // Load channel follow unlock
+      if (result[CLOUD.channelFollowed] === '1') {
+        setChannelFollowUnlock(1)
+      }
+
+      // Sync unlock status from Supabase (handles refunds + cross-device)
+      const syncUserId = tgUserId.current
+      if (syncUserId) {
+        fetchUserUnlockStatus(syncUserId).then(status => {
+          if (!status) return
+          const now = Date.now()
+          // Sync filters_unlocked
+          const filtersExpired = status.filters_unlocked_expires_at
+            ? new Date(status.filters_unlocked_expires_at).getTime() < now
+            : !status.filters_unlocked
+          if (!filtersExpired && status.filters_unlocked) {
+            setFiltersUnlocked(true)
+            storageSet(CLOUD.filtersUnlocked, 'true')
+            storageSet(CLOUD.filtersUnlockedAt, String(now))
+          } else if (filtersExpired || !status.filters_unlocked) {
+            setFiltersUnlocked(false)
+            storageSet(CLOUD.filtersUnlocked, '')
+            storageSet(CLOUD.filtersUnlockedAt, '')
+          }
+          // Sync grid_rows_unlocked
+          const dbRows = status.grid_rows_unlocked || 0
+          if (dbRows >= 0) {
+            setGridRowsUnlocked(dbRows)
+            storageSet(CLOUD.gridRowsUnlocked, String(dbRows))
+          }
+          // Sync has_real_photo
+          setOwnProfile(prev => ({ ...prev, hasRealPhoto: !!status.has_real_photo }))
+          // Sync invisible_until — check timer expiry on login
+          const dbInvisible = status.invisible_until
+          if (dbInvisible) {
+            const expired = new Date(dbInvisible).getTime() < now
+            if (!expired) {
+              setInvisibleUntil(dbInvisible)
+              // Load saved active state, default to on
+              storageGet(CLOUD.invisibleActive).then(saved => {
+                setInvisibleActive(saved === 'false' ? false : true)
+              }).catch(() => setInvisibleActive(true))
+            } else {
+              // Timer expired — make user visible (clear DB + local state)
+              setInvisibleUntil(null)
+              setInvisibleActive(false)
+              storageSet(CLOUD.invisibleActive, 'false')
+              updateInvisibleStatus(syncUserId, null)
+            }
+          }
+        }).catch(err => console.error('fetchUserUnlockStatus error:', err))
+
+        // Load active raffle
+        getActiveRaffle().then(r => {
+          if (r) setRaffle(r)
+        })
+      }
+
+      // Restore lat/lng from CloudStorage
+      const savedLat = result[CLOUD.lat]
+      const savedLng = result[CLOUD.lng]
+      if (savedLat && savedLng) {
+        const lat = parseFloat(savedLat)
+        const lng = parseFloat(savedLng)
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          loaded.lat = lat
+          loaded.lng = lng
+          setLocationGranted(true)
+        }
+      }
+
+      if (Object.keys(loaded).length > 0) {
+        setOwnProfile(prev => {
+          const merged = { ...prev, ...loaded }
+          console.log('Profile merged from storage:', { name: merged.name, photoUrl: merged.tgPhotoUrl?.substring(0,30), height: merged.height, weight: merged.weight })
+          return merged
+        })
+      }
+    })
+  }, [])
+
+  // ─── Auto upsert when user+location ready ─────────────────────────
+  useEffect(() => {
+    const uid = tgUserId.current
+    const lat = ownProfile.lat
+    const lng = ownProfile.lng
+    if (!uid || !lat || !lng || !hasValidKey) return
+
+    console.log('Auto upsert for user', uid, 'at', lat, lng)
+    upsertUser({
+      id: uid,
+      name: ownProfile.name,
+      photo_url: ownProfile.tgPhotoUrl || null,
+      height: ownProfile.height,
+      weight: ownProfile.weight,
+      position: ownProfile.position,
+      is_side: ownProfile.isSide,
+      preference1: ownProfile.preference1 || 'Raw',
+      preference2: ownProfile.preference2 || 'Party',
+      preference3: ownProfile.preference3 || 'Group',
+      preference4: ownProfile.preference4 || 'Travel',
+      open_to_messages: ownProfile.openToMessages || false,
+      tg_username: ownProfile.tgUsername || null,
+      lat,
+      lng,
+      is_online: true,
+      updated_at: new Date().toISOString(),
+    }).then(result => {
+      console.log('Upsert result:', result ? `success id=${result.id}` : 'null')
+      // Auto 7-day filter unlock for new users
+      if (result && !result.filters_unlocked_expires_at) {
+        ensureFilterUnlock(result.id).then(ok => {
+          console.log('Auto filter unlock:', ok ? 'set 7 days' : 'failed')
+        })
+      }
+    }).catch(err => {
+      console.error('Upsert error:', String(err).substring(0, 200))
+    })
+  }, [ownProfile.lat, ownProfile.lng, ownProfile.name, ownProfile.tgPhotoUrl, ownProfile.height, ownProfile.weight, ownProfile.position, ownProfile.isSide, ownProfile.preference1, ownProfile.preference2, ownProfile.preference3, ownProfile.preference4, ownProfile.openToMessages, ownProfile.tgUsername])
+
+  // ─── Heartbeat: update timestamp every 30s ────────────────────────
+  useEffect(() => {
+    if (!locationGranted) return
+    const uid = tgUserId.current
+    if (!uid) return
+
+    const ping = () => {
+      setOnlineStatus(uid, true).catch(console.error)
+    }
+    ping()
+    const heartbeat = setInterval(ping, 30000)
+    return () => clearInterval(heartbeat)
+  }, [locationGranted])
+
+  // ─── Refresh nearby users (manual + auto) ─────────────────────────
+  // Initialize to -120s so first refresh is allowed immediately
+  // Shared 5-min cooldown between top refresh and bottom button
+  const [lastRefreshTime, setLastRefreshTime] = useState(Date.now() - 300000)
+
+  const handleRefresh = useCallback(() => {
+    const lat = ownProfile.lat
+    const lng = ownProfile.lng
+    if (!lat || !lng) return
+    setIsLoadingUsers(true)
+    fetchNearby(lat, lng).then(dbUsers => {
+      const myId = tgUserId.current
+      const mapped = dbUsers.filter(u => u.id !== myId).map(u => dbToProfile(u, lat, lng))
+      // Override own invisible status with local state (in case DB column missing)
+      const ownIdx = mapped.findIndex(u => u.isOwn)
+      if (ownIdx >= 0) {
+        mapped[ownIdx] = { ...mapped[ownIdx], isInvisible: isInvisible, invisibleUntil: invisibleUntil || undefined }
+      }
+      console.log('Nearby refresh:', mapped.length, 'users')
+      setUsers(mapped)
+      setIsLoadingUsers(false)
+    }).catch(err => {
+      console.error('Refresh error:', String(err).substring(0, 200))
+      setIsLoadingUsers(false)
+    })
+  }, [ownProfile.lat, ownProfile.lng])
+
+  // Auto refresh every 5 minutes — triggers when lat/lng available
+  useEffect(() => {
+    const lat = ownProfile.lat
+    const lng = ownProfile.lng
+    if (!lat || !lng) return
+    handleRefresh()
+    const interval = setInterval(handleRefresh, 300000)
+    return () => clearInterval(interval)
+  }, [ownProfile.lat, ownProfile.lng, handleRefresh])
+
+  // ─── Poll flying messages from Supabase (shared across all users) ────
+  useEffect(() => {
+    const poll = () => {
+      const oneMinAgo = new Date(Date.now() - 65000).toISOString()
+      fetchFlyingMessages(oneMinAgo).then(msgs => {
+        if (!msgs.length) return
+        // Deduplicate by Supabase id
+        setFlyingMessages(prev => {
+          const existingIds = new Set(prev.map(p => p.id))
+          const newItems = msgs
+            .filter(m => !existingIds.has(m.id))
+            .map(m => ({
+              id: m.id,
+              text: `@${m.username} said: ${m.text}`,
+              top: `${m.top_percent}vh`,
+            }))
+          if (newItems.length === 0) return prev
+          return [...prev, ...newItems]
+        })
+      })
+    }
+    poll()
+    const interval = setInterval(poll, 8000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // ─── Location granted ──────────────────────────────────────────────
+  const handleLocationGranted = useCallback((lat: number, lng: number) => {
+    console.log('Location granted:', lat.toFixed(6), lng.toFixed(6))
+    setLocationGranted(true)
+    setIsLoadingUsers(true)
+    setOwnProfile(prev => ({ ...prev, lat, lng }))
+    storageSet(CLOUD.lat, String(lat))
+    storageSet(CLOUD.lng, String(lng))
+  }, [])
+
+  // ─── Save profile handler ──────────────────────────────────────────
+  const handleSaveProfile = useCallback((updated: UserProfile) => {
+    console.log('Saving profile:', { age: updated.age, height: updated.height, weight: updated.weight, position: updated.position, isSide: updated.isSide })
+    setOwnProfile(updated)
+  }, [])
+
+  // ─── Message handler ──────────────────────────────────────────────
+  // ─── Message handler with stars gate ──────────────────────────────
+  const handleMessage = useCallback((user: UserProfile) => {
+    // Profile picture gate: target has real photo, current user doesn't
+    if (user.hasRealPhoto && ownProfile.hasRealPhoto !== true) {
+      const tg = getTg()
+      const title = lang === 'tc' ? '需要個人頭像' : lang === 'sc' ? '需要个人头像' : lang === 'ru' ? 'Требуется фото' : 'Profile Picture Required'
+      const msg = lang === 'tc'
+        ? '你需要上傳真實個人頭像才能向此人發送訊息。如果剛剛上傳，請等待幾分鐘後重新啟動應用。'
+        : lang === 'sc'
+        ? '你需要上传真实个人头像才能向此人发送消息。如果刚刚上传，请等待几分钟后重新启动应用。'
+        : lang === 'ru'
+        ? 'Вам нужно загрузить реальное фото профиля, чтобы отправить сообщение. Если вы только что загрузили, подождите несколько минут и перезапустите приложение.'
+        : 'You require a real profile picture to send this person a message. If you just uploaded one to your Telegram profile, wait a few minutes then restart the app and try again.'
+      if (tg?.showPopup) {
+        tg.showPopup({ title, message: msg, buttons: [{ type: 'ok', text: 'OK' }] })
+      } else {
+        alert(msg)
+      }
+      return
+    }
+
+    // Stars gate: user requires payment first
+    if (user.openToMessages && !starsPaidFor.has(user.id)) {
+      const tg = getTg()
+      if (tg?.showPopup) {
+        tg.showPopup({
+          title: '⭐ Send Stars to Chat',
+          message: `${user.name} requires sending Telegram Stars to open chat. Send stars now?`,
+          buttons: [
+            { id: 'pay', type: 'default', text: 'Send ⭐ 50' },
+            { type: 'cancel', text: 'Cancel' }
+          ]
+        }, (btnId: string) => {
+          if (btnId === 'pay') {
+            setStarsPaidFor(prev => new Set(prev).add(user.id))
+            handleMessage(user)
+          }
+        })
+      } else {
+        if (confirm(`Send 50 ⭐ to ${user.name} to open chat?`)) {
+          setStarsPaidFor(prev => new Set(prev).add(user.id))
+          handleMessage(user)
+        }
+      }
+      return
+    }
+
+    // Open Telegram DM directly
+    const tgUrl = `https://t.me/${user.tgUsername || 'hkmembersonlychat'}`
+    const tg = getTg()
+    if (tg?.openTelegramLink) { tg.openTelegramLink(tgUrl); return }
+    if (tg?.openLink) { tg.openLink(tgUrl, { try_instant_view: false }); return }
+    window.open(tgUrl, '_blank')
+  }, [starsPaidFor, ownProfile.hasRealPhoto, lang])
+
+  // ─── Render ───────────────────────────────────────────────────────
+  // Splash screen
+  if (showSplash) {
+    return (
+      <div className="min-h-[100dvh] bg-[#0A0A0A] flex items-center justify-center px-6">
+        <div className="w-full max-w-[min(520px,100vw)] flex flex-col items-center justify-center gap-5">
+          <video
+            src={logoAnim}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-48 h-48 rounded-full object-cover"
+          />
+          <div className="text-center">
+            <h1 className="text-2xl font-bold gradient-text tracking-tight">HKMOD</h1>
+            <p className="text-[#8E8E93] text-xs mt-1">Hong Kong Members Only Dating Bot</p>
+          </div>
+          <p className="text-[#8E8E93]/60 text-[9px] text-center leading-relaxed max-w-[320px]">
+            By using this app, you confirm you are 18+. HKMOD only connects users via Telegram.
+            We do not store messages. All chat happens in Telegram. You are responsible for your own safety when meeting others.
+            We collect: Telegram profile, preferences, and approximate location (to show nearby users only).
+            We do not share data with third parties. Report issues: @HKMembersOnly
+          </p>
+          <p className="text-[#8E8E93]/50 text-[8px] text-center leading-relaxed max-w-[320px] mt-2">
+            Features: Role matching (B/VB/V/VT/T/Side), Preference filters (Safe/Raw, Clean/Party, 1on1/Group, Host/Travel/Outdoor/Sauna),
+            Photo filters, Location-based discovery, Profile editing with 30-day lock, Stars payments for unlocks, Admin tools.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (groupCheck === 'checking') {
+    return (
+      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    )
+  }
+
+  if (groupCheck === 'not_member') {
+    // Gather debug info for the lock screen
+    const tg = getTg()
+    const raw = tg ? JSON.stringify(tg.initDataUnsafe, null, 2) : 'no Telegram WebApp'
+
+    return (
+      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] relative flex flex-col px-6 pt-16 pb-6 overflow-y-auto">
+          <div className="flex flex-col items-center text-center flex-shrink-0">
+            <div className="w-16 h-16 rounded-full bg-[#FF6B35]/10 flex items-center justify-center mb-4">
+              <Lock className="w-8 h-8 text-[#FF6B35]" />
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-2">{t(lang, 'membersOnly')}</h1>
+            <p className="text-[#8E8E93] text-sm mb-1">
+              This app is exclusively for members of
+            </p>
+            <p className="text-[#FF6B35] font-semibold text-sm mb-4">@hkmembersonlychat</p>
+            <button
+              onClick={() => {
+                const tg2 = getTg()
+                const url = 'https://t.me/hkmembersonlychat'
+                if (tg2?.openTelegramLink) {
+                  tg2.openTelegramLink(url)
+                } else if (tg2?.openLink) {
+                  tg2.openLink(url)
+                } else {
+                  window.open(url, '_blank')
+                }
+              }}
+              className="gradient-btn px-6 py-3 rounded-xl text-white font-semibold text-sm nav-press mb-4"
+            >
+              {t(lang, 'openInGroup')}
+            </button>
+          </div>
+
+          {/* Debug info */}
+          <div className="mt-4 flex-1 min-h-0 flex flex-col">
+            <p className="text-[#8E8E93] text-[10px] text-center mb-2">
+              {t(lang, 'openFromGroup')}
+            </p>
+            <details className="text-left">
+              <summary className="text-[#8E8E93] text-[10px] cursor-pointer select-none text-center">
+                {t(lang, 'showDebug')}
+              </summary>
+              <pre className="mt-2 p-2 bg-[#1A1A1A] rounded-lg text-[9px] text-[#8E8E93] overflow-auto max-h-48 whitespace-pre-wrap break-all">
+                {raw}
+              </pre>
+            </details>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!locationGranted) {
+    return (
+      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] relative">
+          <LocationGate onGranted={handleLocationGranted} lang={lang} />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[#0A0A0A]">
-      {view === 'MAIN' && (
-        <MainScreen
-          ownProfile={ownProfile} users={users}
-          onViewOwn={() => setView('OWN_PROFILE')}
-          onViewPhoto={setSelectedPhoto}
-          isLoading={isLoading} lang={lang} setLang={setLang}
-          onRefresh={handleRefresh} isAdmin={isAdmin}
-          filtersUnlocked={filtersUnlocked} onUnlockFilters={handleUnlockFilters}
-          onToggleInvisible={handleToggleInvisible}
-          gridRows={gridRows} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={handleClaimChannelFollow}
-          isInvisible={isInvisible}
-          invisiblePurchased={invisiblePurchased}
-          raffle={raffle} onBuyTicket={handleBuyTicket} onStartNext={handleStartNextRaffle}
-          profileUnlocked={profileUnlocked} onUnlockProfile={handleUnlockProfile}
-        />
-      )}
-      {view === 'OWN_PROFILE' && (
-        <OwnProfileScreen
-          profile={ownProfile} onSave={handleSaveProfile} onBack={() => setView('MAIN')}
-          lang={lang} isAdmin={isAdmin} isInvisible={isInvisible}
-          onToggleInvisible={handleToggleInvisible}
-          profileUnlocked={profileUnlocked}
-        />
-      )}
-      {selectedPhoto && (
-        <PhotoOverlay user={selectedPhoto} onClose={() => setSelectedPhoto(null)} lang={lang} />
-      )}
+    <>
+      <FlyingMessagesOverlay
+        messages={flyingMessages}
+        onDone={(id) => setFlyingMessages(prev => prev.filter(m => m.id !== id))}
+      />
+      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] relative flex flex-col">
+        {view === 'MAIN' ? (
+          <MainScreen
+            ownProfile={ownProfile}
+            users={users}
+            onViewOwnProfile={() => setView('OWN_PROFILE')}
+            onViewPhoto={(u) => setPhotoOverlay(u)}
+            showDbWarning={!hasValidKey}
+            isLoadingUsers={isLoadingUsers}
+            lang={lang}
+            setLang={setLang}
+            onRefresh={handleRefresh}
+            isAdmin={isAdmin}
+            filtersUnlocked={isAdmin || filtersUnlocked}
+            onPromptUnlock={promptUnlock}
+            gridRowsUnlocked={gridRowsUnlocked}
+            channelFollowUnlock={channelFollowUnlock}
+            onClaimChannelFollow={handleClaimChannelFollow}
+            onToggleInvisible={() => {
+              if (isAdmin) {
+                // Admin: toggle on/off (free, controls invisible_until directly)
+                if (isInvisible) {
+                  setInvisibleUntil(null)
+                  setInvisibleActive(false)
+                  storageSet(CLOUD.invisibleActive, 'false')
+                  if (tgUserId.current) updateInvisibleStatus(tgUserId.current, null)
+                } else {
+                  const until = new Date(Date.now() + 30 * 86400000).toISOString()
+                  setInvisibleUntil(until)
+                  setInvisibleActive(true)
+                  storageSet(CLOUD.invisibleActive, 'true')
+                  if (tgUserId.current) updateInvisibleStatus(tgUserId.current, until)
+                }
+              } else if (hasPurchasedInvisible) {
+                // Non-admin + purchased: toggle active state only
+                const newActive = !invisibleActive
+                setInvisibleActive(newActive)
+                storageSet(CLOUD.invisibleActive, String(newActive))
+              } else {
+                // Non-admin + not purchased: prompt payment
+                promptInvisiblePayment()
+              }
+              handleRefresh()
+            }}
+            lastRefreshTime={lastRefreshTime}
+            setLastRefreshTime={setLastRefreshTime}
+            isInvisible={isInvisible}
+            invisiblePurchased={hasPurchasedInvisible}
+            raffle={raffle}
+            onBuyRaffleTicket={handleBuyRaffleTicket}
+            onStartNextRaffle={handleStartNextRaffle}
+            onPromptUnlockProfile={promptUnlockProfile}
+            isPremium={isPremium}
+          />
+        ) : (
+          <OwnProfileScreen
+            profile={ownProfile}
+            onSave={handleSaveProfile}
+            onBack={() => setView('MAIN')}
+            lang={lang}
+            editProfileUnlocked={isAdmin || editProfileUnlocked}
+          />
+        )}
+        {photoOverlay && (
+          <PhotoOverlay user={photoOverlay} onClose={() => setPhotoOverlay(null)} onMessage={handleMessage} lang={lang} />
+        )}
+        {/* Admin popup — Release own lock only */}
+        {adminAction === 'release' && (
+          <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-black/70 flex items-center justify-center" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }} onClick={() => setAdminAction(null)}>
+            <div className="bg-[#1C1C1E] rounded-xl p-5 w-64 space-y-3" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-bold text-white text-center">
+                🔓 Release Profile Lock
+              </h3>
+              <p className="text-xs text-[#8E8E93] text-center">
+                Release your own 30-day preference lock:
+              </p>
+              <button
+                onClick={async () => {
+                  await storageSet(CLOUD.prefLockedAt, '0')
+                  alert('Your profile lock has been released! Refresh to apply.')
+                  window.location.reload()
+                  setAdminAction(null)
+                }}
+                className="w-full py-2.5 rounded-lg bg-[#2C2C2E] text-white text-sm font-bold nav-press"
+              >
+                Release My Lock
+              </button>
+              <button onClick={() => setAdminAction(null)} className="w-full py-1.5 text-[10px] text-[#8E8E93]">Cancel</button>
+            </div>
+          </div>
+        )}
+        {/* Only show BottomNav on MAIN view */}
+        {view === 'MAIN' && (
+          <BottomNav
+            lang={lang}
+            cooldownRemaining={Math.max(0, 60000 - (Date.now() - lastFlyingSendRef.current))}
+            onSend={(text) => {
+              // 1 min cooldown check
+              if (Date.now() - lastFlyingSendRef.current < 60000) return
+              lastFlyingSendRef.current = Date.now()
+              const top = 10 + Math.random() * 80 // 10% - 90% of viewport height
+              const prefixed = `@${ownProfile.tgUsername || ownProfile.name || 'User'} said: ${text}`
+              // Show locally immediately
+              setFlyingMessages(prev => [...prev, { id: Date.now(), text: prefixed, top: `${top}vh` }])
+              // Store in Supabase so all users see it
+              insertFlyingMessage({
+                text,
+                username: ownProfile.tgUsername || ownProfile.name || 'User',
+                user_id: tgUserId.current || 0,
+                top_percent: Math.round(top),
+              })
+            }}
+          />
+        )}
+      </div>
     </div>
+    </>
   )
 }
