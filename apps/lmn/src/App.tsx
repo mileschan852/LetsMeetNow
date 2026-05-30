@@ -786,7 +786,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   return (
     <div className="pb-20">
       <div className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
-        {/* LEFT: Logo + HKMOD + Raffle + Dot Matrix Timer */}
+        {/* LEFT: Logo + LMN + Raffle + Dot Matrix Timer */}
         <div className="flex items-center gap-2">
           <img src={logoImg} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
           <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
