@@ -873,7 +873,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
-        <span className="ml-1 text-[#5AC8FA]">v15</span>
+        <span className="ml-1 text-[#5AC8FA]">15.1L</span>
       </div>
 
       {showDbWarning && (
