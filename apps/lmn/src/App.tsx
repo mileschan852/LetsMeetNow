@@ -29,11 +29,6 @@ interface UserProfile {
   age: number
   height: number
   weight: number
-  gender: string
-  seekingGender: string
-  dob: string | null
-  seekingToday: string | null
-  meetupType: string | null
   position: number
   isSide: boolean
   isOnline: boolean
@@ -50,18 +45,16 @@ interface UserProfile {
   tgPhotoUrl?: string
   tgPhotos?: string[]
   updatedAt?: string
-  hasPhoto: boolean
-  hasRealPhoto?: boolean
+  hasPhoto: boolean   // true = has any avatar URL
+  hasRealPhoto?: boolean // true = real photo (from DB, detected via Content-Type)
+  // Invisible mode
   invisibleUntil?: string
   isInvisible: boolean
-  hideAgeUntil?: string | null
 }
 
-type View = 'MAIN' | 'OWN_PROFILE' | 'AGE_GATE' | 'GENDER_SETUP' | 'DISCLAIMER'
+type View = 'MAIN' | 'OWN_PROFILE'
 
-const ADMIN_IDS = [5202742795, 725368127]
-const ADMIN_USERNAMES = ['mileschan852']
-function isAdminUser(user: any) { return !!user?.id && (ADMIN_IDS.includes(user.id) || ADMIN_USERNAMES.includes(user?.username || '')) }
+// ─── Telegram API ────────────────────────────────────────────────────
 
 interface TgWebApp {
   ready: () => void
@@ -118,8 +111,8 @@ function isInTelegram(): boolean {
 
 // Only these Telegram usernames / IDs are admins. Bot owner is always included.
 // Add more here when requested.
-const ADMIN_IDS = [1231127407, 6837870949]
-const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly']
+const ADMIN_IDS = [5202742795, 725368127]
+const ADMIN_USERNAMES = ['mileschan852']
 
 function isAdminUser(user: { id?: number; username?: string } | null | undefined): boolean {
   if (!user) return false

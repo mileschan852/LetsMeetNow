@@ -34,6 +34,15 @@ export interface DbUser {
   seeking_today: string | null
   meetup_type: string | null
   
+  // HKMOD fields (for compatibility)
+  position: number
+  is_side: boolean
+  preference1: string | null
+  preference2: string | null
+  preference3: string | null
+  preference4: string | null
+  open_to_messages: boolean
+  
   // Shared premium fields
   invisible_until: string | null
   invisible_purchased_at: string | null
