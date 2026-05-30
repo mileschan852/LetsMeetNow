@@ -29,27 +29,28 @@ interface UserProfile {
   age: number
   height: number
   weight: number
-  position: number
-  isSide: boolean
+  gender: string          // Male | Female
+  seekingGender: string   // Men | Women | Both
+  dob: string | null
+  seekingToday: string | null  // Just Browsing | Chat | Meetup | Webcam
+  meetupType: string | null    // Coffee | Meals | Outdoor | Charity | Bar & Parties | Bed
   isOnline: boolean
   distance: number
   lat?: number
   lng?: number
   isOwn?: boolean
-  preference1?: 'Safe' | 'Raw'
-  preference2?: 'Clean' | 'Party' | 'Party✓'
-  preference3?: '1on1' | 'Group'
-  preference4?: 'Host' | 'Travel' | 'Outdoor' | 'Sauna'
   openToMessages?: boolean
   tgUsername?: string
   tgPhotoUrl?: string
   tgPhotos?: string[]
   updatedAt?: string
-  hasPhoto: boolean   // true = has any avatar URL
-  hasRealPhoto?: boolean // true = real photo (from DB, detected via Content-Type)
+  hasPhoto: boolean
+  hasRealPhoto?: boolean
   // Invisible mode
   invisibleUntil?: string
   isInvisible: boolean
+  // Hide age
+  hideAgeUntil?: string | null
 }
 
 type View = 'MAIN' | 'OWN_PROFILE'
@@ -240,7 +241,45 @@ async function storageGetAll(): Promise<Record<string, string>> {
   return { ...ls, ...unPrefixed }
 }
 
-// ─── Role Helpers ────────────────────────────────────────────────────
+// ─── Age / Zodiac Helpers ────────────────────────────────────────────
+
+function getAge(dob: string): number {
+  const birth = new Date(dob)
+  const now = new Date()
+  let age = now.getFullYear() - birth.getFullYear()
+  const m = now.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
+  return age
+}
+
+function getZodiac(dob: string): string {
+  const d = new Date(dob)
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries'
+  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus'
+  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini'
+  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer'
+  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo'
+  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo'
+  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra'
+  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio'
+  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius'
+  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'Capricorn'
+  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius'
+  return 'Pisces'
+}
+
+function getZodiacEmoji(sign: string): string {
+  const map: Record<string, string> = {
+    Aries: '♈', Taurus: '♉', Gemini: '♊', Cancer: '♋',
+    Leo: '♌', Virgo: '♍', Libra: '♎', Scorpio: '♏',
+    Sagittarius: '♐', Capricorn: '♑', Aquarius: '♒', Pisces: '♓',
+  }
+  return map[sign] || ''
+}
+
+// ─── Role Helpers (HKMOD compatibility) ──────────────────────────────
 
 function formatRole(value: number, isSide: boolean): string {
   if (isSide) return 'Side'
@@ -251,7 +290,6 @@ function formatRole(value: number, isSide: boolean): string {
   return `${value.toFixed(1)} Versatile Top`
 }
 
-// Short role label shown on grid (B, VB, V, VT, T, Side)
 function getGridRoleLabel(value: number, isSide: boolean): string {
   if (isSide) return 'Side'
   if (value === 0) return 'B'
@@ -323,34 +361,34 @@ function formatDist(d: number): string {
 
 function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
   const dist = u.lat && u.lng ? getDistance(myLat, myLng, u.lat, u.lng) : 0
+  const age = u.dob ? getAge(u.dob) : 0
   return {
     id: String(u.id),
     name: u.name,
-    age: 0,
+    age,
     height: u.height,
     weight: u.weight,
-    position: u.position,
-    isSide: u.is_side,
+    gender: u.gender || 'Male',
+    seekingGender: u.seeking_gender || 'Women',
+    dob: u.dob,
+    seekingToday: u.seeking_today || 'Just Browsing',
+    meetupType: u.meetup_type || null,
     isOnline: u.is_online,
     distance: Math.round(dist),
     lat: u.lat,
     lng: u.lng,
-    preference1: u.preference1 as 'Safe' | 'Raw',
-    preference2: u.preference2 as 'Clean' | 'Party' | 'Party✓',
-    preference3: u.preference3 as '1on1' | 'Group',
-    preference4: (u.preference4 === 'Off' ? 'Travel' : u.preference4 as 'Host' | 'Travel' | 'Outdoor' | 'Sauna') || undefined,
     openToMessages: u.open_to_messages || false,
     tgUsername: u.tg_username || undefined,
     tgPhotoUrl: u.photo_url?.startsWith('http') ? u.photo_url : undefined,
     tgPhotos: u.photo_url?.startsWith('http') ? [u.photo_url] : [],
     updatedAt: u.updated_at,
-    // hasPhoto: true = has any avatar image (real photo, initials, emoji)
     hasPhoto: !!(u.photo_url && u.photo_url.startsWith('http')),
-    // hasRealPhoto: from DB (detected via Content-Type on user's login)
     hasRealPhoto: u.has_real_photo ?? undefined,
-    // Invisible mode
     invisibleUntil: u.invisible_until ?? undefined,
     isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
+    hideAgeUntil: u.hide_age_until ?? null,
+  }
+}
   }
 }
 
@@ -663,15 +701,9 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   onClaimChannelFollow: () => void
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
-  // Role/Host filters have 'All' (multiple options). Safe/Raw/Clean/Party/1on1/Group are binary — no 'All'.
-  const [pref1Filter, setPref1Filter] = useState<'Safe' | 'Raw'>(ownProfile.preference1 || 'Safe')
-  const [pref2Filter, setPref2Filter] = useState<'Clean' | 'Party' | 'Party✓'>(
-    ownProfile.preference2 === 'Party✓' ? 'Party' : (ownProfile.preference2 || 'Clean')
-  )
-  const [pref3Filter, setPref3Filter] = useState<'1on1' | 'Group'>(ownProfile.preference3 || '1on1')
-  const [hostFilter, setHostFilter] = useState<'All' | 'Host' | 'Travel' | 'Outdoor' | 'Sauna'>('All')
-  const [roleFilter, setRoleFilter] = useState<RoleFilterMode>('All')
-  const [photoFilter, setPhotoFilter] = useState<'有圖' | '沒圖'>('沒圖')
+  const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All')
+  const [seekingFilter, setSeekingFilter] = useState<'All' | 'Men' | 'Women' | 'Both'>('All')
+  const [photoFilter, setPhotoFilter] = useState<'All' | 'Has Photo' | 'No Photo'>('All')
   const [showTestUsers, setShowTestUsers] = useState(false)
 
   const LANG_CYCLE: Lang[] = ['en', 'tc', 'sc', 'ru']
@@ -682,32 +714,17 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     storageSet(CLOUD.lang, next)
   }
 
-  const cyclePref1Filter = () => {
-    setPref1Filter(pref1Filter === 'Safe' ? 'Raw' : 'Safe')
+  const cycleGenderFilter = () => {
+    const order: Array<'All' | 'Male' | 'Female'> = ['All', 'Male', 'Female']
+    setGenderFilter(order[(order.indexOf(genderFilter) + 1) % order.length])
   }
-  const cyclePref2Filter = () => {
-    const order: Array<'Clean' | 'Party' | 'Party✓'> = ['Clean', 'Party', 'Party✓']
-    const idx = order.indexOf(pref2Filter)
-    setPref2Filter(order[(idx + 1) % order.length])
+  const cycleSeekingFilter = () => {
+    const order: Array<'All' | 'Men' | 'Women' | 'Both'> = ['All', 'Men', 'Women', 'Both']
+    setSeekingFilter(order[(order.indexOf(seekingFilter) + 1) % order.length])
   }
-  const cyclePref3Filter = () => {
-    setPref3Filter(pref3Filter === '1on1' ? 'Group' : '1on1')
-  }
-  const cycleHostFilter = () => {
-    const order: Array<'All' | 'Host' | 'Travel' | 'Outdoor' | 'Sauna'> = ['All', 'Host', 'Travel', 'Outdoor', 'Sauna']
-    setHostFilter(order[(order.indexOf(hostFilter) + 1) % order.length])
-  }
-  // Party filter: Clean users = locked, Party/Party✓ users = only Party↔Party✓ (no Clean)
-  const cyclePartyPref2Filter = () => {
-    if (ownProfile.preference2 === 'Clean') return // locked, no-op
-    // Toggle between Party ↔ Party✓ only
-    setPref2Filter(pref2Filter === 'Party' ? 'Party✓' : 'Party')
-  }
-
-  const cycleRoleFilter = () => {
-    const order: RoleFilterMode[] = ['All', 'B', 'VB', 'V', 'VT', 'T', 'Side']
-    const idx = order.indexOf(roleFilter)
-    setRoleFilter(order[(idx + 1) % order.length])
+  const cyclePhotoFilter = () => {
+    const order: Array<'All' | 'Has Photo' | 'No Photo'> = ['All', 'Has Photo', 'No Photo']
+    setPhotoFilter(order[(order.indexOf(photoFilter) + 1) % order.length])
   }
 
   // Online = updated within 1 hour. Own profile always counts as active.
@@ -729,67 +746,20 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     if (u.isOwn) return true
     if (onlineOnly && !isRecentlyActive(u)) return false
     // Test users: hidden by default, admin can show
-    // When shown, test users go through SAME filters as real users
     if (u.tgUsername === '_test_') {
       if (!showTestUsers) return false
-      // Continue to role + pref filters below (test users are NOT exempt)
     }
     
-    // 1. Role filter
-    if (isAdmin && roleFilter !== 'All') {
-      if (roleFilter === 'Side') {
-        if (!u.isSide) return false
-      } else {
-        if (u.isSide) return false
-        if (roleFilter === 'B') {
-          // B: B(0) + VB(0.1-0.4)
-          if (u.position > 0.4) return false
-        } else if (roleFilter === 'VB') {
-          // VB: B(0) + VB(0.1-0.4) + V(0.5)
-          if (u.position > 0.4 && u.position !== 0.5) return false
-        } else if (roleFilter === 'V') {
-          // V: all non-side (no position restriction)
-        } else if (roleFilter === 'VT') {
-          // VT: V(0.5) + VT(0.6-0.9) + T(1)
-          if (u.position < 0.5) return false
-        } else if (roleFilter === 'T') {
-          // T: VT(0.6-0.9) + T(1)
-          if (u.position < 0.6) return false
-        }
-      }
-    } else if (!isAdmin) {
-      // Non-admin: auto opposite role filter
-      if (ownProfile.isSide) {
-        if (!u.isSide) return false
-      } else {
-        if (u.isSide) return false
-        // B/VB sees V/VT/T (position >= 0.5)
-        if (ownProfile.position <= 0.4 && u.position < 0.5) return false
-        // VT/T sees B/VB/V (position <= 0.5)
-        if (ownProfile.position >= 0.6 && u.position > 0.5) return false
-        // V (0.5) sees all non-side — no filter
-      }
-    }
-    
-    // 2. Preference1 filter (Safe/Raw) — binary, always active
-    if (u.preference1 !== pref1Filter) return false
-    // 3. Preference2 filter — 'Party' shows both Party and Party✓
-    if (pref2Filter === 'Party✓') {
-      if (u.preference2 !== 'Party✓') return false
-    } else if (pref2Filter === 'Party') {
-      if (u.preference2 !== 'Party' && u.preference2 !== 'Party✓') return false
-    } else {
-      if (u.preference2 !== pref2Filter) return false
-    }
-    // 4. Preference3 filter (1on1/Group) — 1on1 filters to 1on1 only, Group shows all
-    if (pref3Filter === '1on1' && u.preference3 !== '1on1') return false
-    // 5. Host/Travel/Outdoor/Sauna — 'All' = no filter
-    if (hostFilter !== 'All' && u.preference4 !== hostFilter) return false
-    // 6. Photo filter — '有圖' = only users with real uploaded photos (hasRealPhoto from DB)
-    if (photoFilter === '有圖' && u.hasRealPhoto !== true) return false
+    // Gender filter
+    if (genderFilter !== 'All' && u.gender !== genderFilter) return false
+    // Seeking filter
+    if (seekingFilter !== 'All' && u.seekingGender !== seekingFilter) return false
+    // Photo filter
+    if (photoFilter === 'Has Photo' && !u.hasPhoto) return false
+    if (photoFilter === 'No Photo' && u.hasPhoto) return false
+
     return true
   }).sort((a, b) => {
-    // Own profile always first, then sort by distance (closest first)
     if (a.isOwn) return -1
     if (b.isOwn) return 1
     return (a.distance || Infinity) - (b.distance || Infinity)
@@ -923,60 +893,30 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
             {onlineOnly ? t(lang, 'onlineStatus') : t(lang, 'offlineStatus')}
           </button>
 
-          {/* 2. No pic/Photos toggle */}
+          {/* 2. Photo filter */}
           <button
-            onClick={() => setPhotoFilter(photoFilter === '有圖' ? '沒圖' : '有圖')}
-            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoFilter === '有圖' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+            onClick={cyclePhotoFilter}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoFilter === 'Has Photo' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : photoFilter === 'No Photo' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
           >
-            {photoFilter === '有圖' ? t(lang, 'hasPic') : t(lang, 'noPic')}
+            {photoFilter === 'All' ? t(lang, 'all') : photoFilter === 'Has Photo' ? t(lang, 'hasPic') : t(lang, 'noPic')}
           </button>
 
           {/* Divider */}
           <div className="w-px h-4 bg-[#2C2C2E] flex-shrink-0" />
 
-          {/* 3. Role filter (🔒 until purchased) → All/Bottom/Versatile/Vers Bottom/Vers Top/Top/Side */}
-          {isAdmin || filtersUnlocked ? (
-            <button onClick={cycleRoleFilter}
-              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${getFilterColor(roleFilter)}`}
-            >
-              {roleFilter === 'All' ? t(lang, 'allRoles') : roleFilter}
-            </button>
-          ) : (
-            <button onClick={onPromptUnlock}
-              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
-              title="Purchase filters to unlock"
-            >
-              🔒 {roleFilter}
-            </button>
-          )}
-
-          {/* 4. Safe/Raw */}
-          {isAdmin || filtersUnlocked ? (
-            <button onClick={cyclePref1Filter}
-              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${pref1Filter === 'Safe' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
-            >
-              {tPref(lang, pref1Filter)}
-            </button>
-          ) : (
-            <button onClick={onPromptUnlock}
-              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
-            >
-              🔒 {tPref(lang, pref1Filter)}
-            </button>
-          )}
-
-          {/* 5. Party/Clean */}
-          <button onClick={isAdmin || filtersUnlocked ? cyclePref2Filter : cyclePartyPref2Filter}
-            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${pref2Filter === 'Clean' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}
+          {/* 3. Gender filter */}
+          <button onClick={cycleGenderFilter}
+            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${genderFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : genderFilter === 'Male' ? 'bg-blue-500/20 text-blue-400' : 'bg-pink-500/20 text-pink-400'}`}
           >
-            {tPref(lang, pref2Filter)}
+            {genderFilter === 'All' ? t(lang, 'all') : genderFilter}
           </button>
 
-          {/* 6. 1on1/Group */}
-          {isAdmin || filtersUnlocked ? (
-            <button onClick={cyclePref3Filter}
-              className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${pref3Filter === '1on1' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'}`}
-            >
+          {/* 4. Seeking filter */}
+          <button onClick={cycleSeekingFilter}
+            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${seekingFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'bg-purple-500/20 text-purple-400'}`}
+          >
+            {seekingFilter === 'All' ? t(lang, 'all') : seekingFilter}
+          </button>
               {tPref(lang, pref3Filter)}
             </button>
           ) : (
