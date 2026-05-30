@@ -29,16 +29,17 @@ interface UserProfile {
   age: number
   height: number
   weight: number
-  gender: string          // Male | Female
-  seekingGender: string   // Men | Women | Both
-  dob: string | null
-  seekingToday: string | null  // Just Browsing | Chat | Meetup | Webcam
-  meetupType: string | null    // Coffee | Meals | Outdoor | Charity | Bar & Parties | Bed
+  position: number
+  isSide: boolean
   isOnline: boolean
   distance: number
   lat?: number
   lng?: number
   isOwn?: boolean
+  preference1?: 'Safe' | 'Raw'
+  preference2?: 'Clean' | 'Party' | 'Party✓'
+  preference3?: '1on1' | 'Group'
+  preference4?: 'Host' | 'Travel' | 'Outdoor' | 'Sauna'
   openToMessages?: boolean
   tgUsername?: string
   tgPhotoUrl?: string
@@ -49,7 +50,12 @@ interface UserProfile {
   // Invisible mode
   invisibleUntil?: string
   isInvisible: boolean
-  // Hide age
+  // LMN fields (mapped from DB)
+  gender?: string
+  seekingGender?: string
+  dob?: string | null
+  seekingToday?: string
+  meetupType?: string | null
   hideAgeUntil?: string | null
 }
 
@@ -241,45 +247,7 @@ async function storageGetAll(): Promise<Record<string, string>> {
   return { ...ls, ...unPrefixed }
 }
 
-// ─── Age / Zodiac Helpers ────────────────────────────────────────────
-
-function getAge(dob: string): number {
-  const birth = new Date(dob)
-  const now = new Date()
-  let age = now.getFullYear() - birth.getFullYear()
-  const m = now.getMonth() - birth.getMonth()
-  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
-  return age
-}
-
-function getZodiac(dob: string): string {
-  const d = new Date(dob)
-  const month = d.getMonth() + 1
-  const day = d.getDate()
-  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries'
-  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus'
-  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini'
-  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer'
-  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo'
-  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo'
-  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra'
-  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio'
-  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius'
-  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'Capricorn'
-  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius'
-  return 'Pisces'
-}
-
-function getZodiacEmoji(sign: string): string {
-  const map: Record<string, string> = {
-    Aries: '♈', Taurus: '♉', Gemini: '♊', Cancer: '♋',
-    Leo: '♌', Virgo: '♍', Libra: '♎', Scorpio: '♏',
-    Sagittarius: '♐', Capricorn: '♑', Aquarius: '♒', Pisces: '♓',
-  }
-  return map[sign] || ''
-}
-
-// ─── Role Helpers (HKMOD compatibility) ──────────────────────────────
+// ─── Role Helpers ────────────────────────────────────────────────────
 
 function formatRole(value: number, isSide: boolean): string {
   if (isSide) return 'Side'
@@ -290,6 +258,7 @@ function formatRole(value: number, isSide: boolean): string {
   return `${value.toFixed(1)} Versatile Top`
 }
 
+// Short role label shown on grid (B, VB, V, VT, T, Side)
 function getGridRoleLabel(value: number, isSide: boolean): string {
   if (isSide) return 'Side'
   if (value === 0) return 'B'
@@ -361,35 +330,71 @@ function formatDist(d: number): string {
 
 function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
   const dist = u.lat && u.lng ? getDistance(myLat, myLng, u.lat, u.lng) : 0
-  const age = u.dob ? getAge(u.dob) : 0
   return {
     id: String(u.id),
     name: u.name,
-    age,
+    age: 0,
     height: u.height,
     weight: u.weight,
-    gender: u.gender || 'Male',
-    seekingGender: u.seeking_gender || 'Women',
-    dob: u.dob,
-    seekingToday: u.seeking_today || 'Just Browsing',
-    meetupType: u.meetup_type || null,
+    position: u.position,
+    isSide: u.is_side,
     isOnline: u.is_online,
     distance: Math.round(dist),
     lat: u.lat,
     lng: u.lng,
+    preference1: u.preference1 as 'Safe' | 'Raw',
+    preference2: u.preference2 as 'Clean' | 'Party' | 'Party✓',
+    preference3: u.preference3 as '1on1' | 'Group',
+    preference4: (u.preference4 === 'Off' ? 'Travel' : u.preference4 as 'Host' | 'Travel' | 'Outdoor' | 'Sauna') || undefined,
     openToMessages: u.open_to_messages || false,
     tgUsername: u.tg_username || undefined,
     tgPhotoUrl: u.photo_url?.startsWith('http') ? u.photo_url : undefined,
     tgPhotos: u.photo_url?.startsWith('http') ? [u.photo_url] : [],
     updatedAt: u.updated_at,
+    // hasPhoto: true = has any avatar image (real photo, initials, emoji)
     hasPhoto: !!(u.photo_url && u.photo_url.startsWith('http')),
+    // hasRealPhoto: from DB (detected via Content-Type on user's login)
     hasRealPhoto: u.has_real_photo ?? undefined,
+    // Invisible mode
     invisibleUntil: u.invisible_until ?? undefined,
     isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
+    // LMN fields from DB
+    gender: u.gender || 'Male',
+    seekingGender: u.seeking_gender || 'Women',
+    dob: u.dob ? u.dob : undefined,
+    seekingToday: u.seeking_today || 'Just Browsing',
+    meetupType: u.meetup_type ? u.meetup_type : undefined,
     hideAgeUntil: u.hide_age_until ?? null,
   }
 }
+
+// ─── Zodiac Helpers ─────────────────────────────────────────────────
+
+function getZodiac(dob: string): string {
+  const d = new Date(dob)
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries'
+  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus'
+  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini'
+  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer'
+  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo'
+  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo'
+  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra'
+  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio'
+  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius'
+  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'Capricorn'
+  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius'
+  return 'Pisces'
+}
+
+function getZodiacEmoji(sign: string): string {
+  const map: Record<string, string> = {
+    Aries: '♈', Taurus: '♉', Gemini: '♊', Cancer: '♋',
+    Leo: '♌', Virgo: '♍', Libra: '♎', Scorpio: '♏',
+    Sagittarius: '♐', Capricorn: '♑', Aquarius: '♒', Pisces: '♓',
   }
+  return map[sign] || ''
 }
 
 // ─── Photo Overlay ────────────────────────────────────────────────────
@@ -398,7 +403,6 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const photos = user.tgPhotos?.length ? user.tgPhotos : (user.tgPhotoUrl ? [user.tgPhotoUrl] : [])
-  const role = formatRole(user.position, user.isSide)
 
   const handleScroll = () => {
     if (!scrollRef.current) return
@@ -468,11 +472,11 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
         <div className="flex gap-3 mt-3 text-xs">
           <span className="text-[#8E8E93]">{user.height}cm</span>
           <span className="text-[#8E8E93]">{user.weight}kg</span>
-          <span className="text-[#FF6B35] font-bold">{role}</span>
-          {user.preference1 && <span className={`font-bold ${user.preference1 === 'Safe' ? 'text-green-400' : 'text-red-400'}`}>{user.preference1}</span>}
-          {user.preference2 && <span className={`font-bold ${user.preference2 === 'Clean' ? 'text-blue-400' : 'text-purple-400'}`}>{user.preference2}</span>}
-          {user.preference3 && <span className={`font-bold ${user.preference3 === '1on1' ? 'text-yellow-400' : 'text-orange-400'}`}>{user.preference3}</span>}
-          {user.preference4 && <span className={`font-bold ${user.preference4 === 'Host' ? 'text-indigo-400' : user.preference4 === 'Travel' ? 'text-cyan-400' : user.preference4 === 'Outdoor' ? 'text-lime-400' : 'text-amber-400'}`}>{user.preference4}</span>}
+          <span className={`font-bold ${user.gender === 'Male' ? 'text-blue-400' : 'text-pink-400'}`}>{user.gender}</span>
+          <span className="text-[#8E8E93]">→ {user.seekingGender}</span>
+          {user.dob && <span className="text-purple-400 font-bold">{getZodiacEmoji(getZodiac(user.dob))} {getZodiac(user.dob)}</span>}
+          {user.seekingToday && <span className="text-green-400 font-bold">{user.seekingToday}</span>}
+          {user.meetupType && <span className="text-cyan-400 font-bold">{user.meetupType}</span>}
           {user.openToMessages && <span className="font-bold text-yellow-400">⭐ {t(lang, 'message')}</span>}
         </div>
       </div>
@@ -617,7 +621,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
   const photo = user.tgPhotoUrl
-  const roleLabel = getGridRoleLabel(user.position, user.isSide)
+  const genderLabel = user.gender?.charAt(0) || '?'
 
   return (
     <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
@@ -664,7 +668,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
         <div className="flex items-center justify-between">
           <p className="text-[#FF6B35] text-[7px] font-medium">{formatDist(user.distance)}</p>
           {!user.isOwn && <p className="text-[#8E8E93] text-[6px]">{getTimeAgo(user.updatedAt)}</p>}
-          <p className="text-[#8E8E93] text-[6px] font-bold">{roleLabel}</p>
+          <p className={`text-[6px] font-bold ${user.gender === 'Male' ? 'text-blue-400' : 'text-pink-400'}`}>{genderLabel}</p>
         </div>
       </div>
     </button>
@@ -701,6 +705,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   onClaimChannelFollow: () => void
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
+  // LMN filters: Gender, Seeking, Photo
   const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All')
   const [seekingFilter, setSeekingFilter] = useState<'All' | 'Men' | 'Women' | 'Both'>('All')
   const [photoFilter, setPhotoFilter] = useState<'All' | 'Has Photo' | 'No Photo'>('All')
@@ -746,20 +751,20 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     if (u.isOwn) return true
     if (onlineOnly && !isRecentlyActive(u)) return false
     // Test users: hidden by default, admin can show
+    // When shown, test users go through SAME filters as real users
     if (u.tgUsername === '_test_') {
       if (!showTestUsers) return false
+      // Continue to role + pref filters below (test users are NOT exempt)
     }
     
-    // Gender filter
+    // LMN filters
     if (genderFilter !== 'All' && u.gender !== genderFilter) return false
-    // Seeking filter
     if (seekingFilter !== 'All' && u.seekingGender !== seekingFilter) return false
-    // Photo filter
     if (photoFilter === 'Has Photo' && !u.hasPhoto) return false
     if (photoFilter === 'No Photo' && u.hasPhoto) return false
-
     return true
   }).sort((a, b) => {
+    // Own profile always first, then sort by distance (closest first)
     if (a.isOwn) return -1
     if (b.isOwn) return 1
     return (a.distance || Infinity) - (b.distance || Infinity)
@@ -783,8 +788,8 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
       <div className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
         {/* LEFT: Logo + HKMOD + Raffle + Dot Matrix Timer */}
         <div className="flex items-center gap-2">
-          <img src={logoImg} alt="HKMOD" className="w-8 h-8 rounded-full object-cover" />
-          <h1 className="text-xl font-bold gradient-text tracking-tight">HKMOD</h1>
+          <img src={logoImg} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
+          <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
           <div className="w-px h-5 bg-[#2C2C2E] mx-0.5" />
           {/* Prize Draw (Raffle) button */}
           <RaffleButton
@@ -881,7 +886,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         </div>
       )}
 
-      {/* Filter bar: 6 buttons — 1.online 2.photos 3.role(🔒) 4.safe/raw 5.party 6.1on1 | host always open */}
+      {/* Filter bar: 4 buttons — 1.online 2.photo 3.gender 4.seeking */}
       <div className="px-3 py-2">
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
           {/* 1. Offline/Online toggle */}
@@ -896,9 +901,9 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
           {/* 2. Photo filter */}
           <button
             onClick={cyclePhotoFilter}
-            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoFilter === 'Has Photo' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : photoFilter === 'No Photo' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoFilter === 'Has Photo' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : photoFilter === 'No Photo' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
           >
-            {photoFilter === 'All' ? t(lang, 'all') : photoFilter === 'Has Photo' ? t(lang, 'hasPic') : t(lang, 'noPic')}
+            {photoFilter === 'All' ? 'Photo' : photoFilter === 'Has Photo' ? '✅ Photo' : '❌ Photo'}
           </button>
 
           {/* Divider */}
@@ -908,29 +913,14 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
           <button onClick={cycleGenderFilter}
             className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${genderFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : genderFilter === 'Male' ? 'bg-blue-500/20 text-blue-400' : 'bg-pink-500/20 text-pink-400'}`}
           >
-            {genderFilter === 'All' ? t(lang, 'all') : genderFilter}
+            {genderFilter === 'All' ? 'All' : genderFilter}
           </button>
 
           {/* 4. Seeking filter */}
           <button onClick={cycleSeekingFilter}
-            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${seekingFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'bg-purple-500/20 text-purple-400'}`}
+            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${seekingFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : seekingFilter === 'Men' ? 'bg-blue-500/20 text-blue-400' : seekingFilter === 'Women' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}
           >
-            {seekingFilter === 'All' ? t(lang, 'all') : seekingFilter}
-          </button>
-              {tPref(lang, pref3Filter)}
-            </button>
-          ) : (
-            <button onClick={onPromptUnlock}
-              className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
-            >
-              🔒 {tPref(lang, pref3Filter)}
-            </button>
-          )}
-
-          {/* Host — always unlocked */}
-          <button onClick={cycleHostFilter}
-            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${hostFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93]' : hostFilter === 'Host' ? 'bg-indigo-500/20 text-indigo-400' : hostFilter === 'Travel' ? 'bg-cyan-500/20 text-cyan-400' : hostFilter === 'Outdoor' ? 'bg-lime-500/20 text-lime-400' : 'bg-amber-500/20 text-amber-400'}`}>
-            {hostFilter === 'All' ? t(lang, 'anywhere') : tPref(lang, hostFilter)}
+            {seekingFilter === 'All' ? 'Seeking' : seekingFilter}
           </button>
         </div>
       </div>
