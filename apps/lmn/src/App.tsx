@@ -934,7 +934,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         )}
 
 {(() => {
-          const effectiveRows = gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
+          const effectiveRows = 2 + gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
           const unlockedSlots = effectiveRows * 5
           const totalRealUsers = sortedUsers.length
           const hasMoreUsers = totalRealUsers > unlockedSlots
