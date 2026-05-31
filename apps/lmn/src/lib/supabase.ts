@@ -63,7 +63,7 @@ export async function upsertUser(user: Partial<DbUser>): Promise<DbUser | null> 
     const { open_to_messages, unlock_count, filters_unlocked, filters_unlocked_at, filters_unlocked_expires_at, edit_unlocked, edit_unlocked_at, edit_unlocked_expires_at, grid_rows_unlocked, has_real_photo, ...dbSafeUser } = user as any
     const body = JSON.stringify(dbSafeUser)
     console.log('upsertUser POST body:', body.substring(0, 200))
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?on_conflict=id`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?on_conflict=id`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=representation' },
       body,
@@ -92,7 +92,7 @@ export async function fetchNearby(lat: number, lng: number, _radiusDegrees = 0.1
   if (!hasValidKey) return []
   try {
     const fullCols = 'id,name,photo_url,height,weight,position,is_side,preference1,preference2,preference3,preference4,lat,lng,tg_username,is_online,updated_at,unlock_count,filters_unlocked,filters_unlocked_expires_at,edit_unlocked,edit_unlocked_expires_at,grid_rows_unlocked,has_real_photo,invisible_until,invisible_purchased_at'
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?select=${fullCols}&limit=200`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?select=${fullCols}&limit=200`, { headers })
     if (res.ok) {
       const data = await res.json() as DbUser[]
       const sorted = data.filter(u => u.lat && u.lng).map(u => ({ user: u, dist: haversineKm(lat, lng, u.lat!, u.lng!) })).sort((a, b) => a.dist - b.dist).slice(0, 100)
@@ -100,12 +100,12 @@ export async function fetchNearby(lat: number, lng: number, _radiusDegrees = 0.1
       return sorted.map(d => d.user)
     }
     const basicCols = 'id,name,photo_url,height,weight,position,is_side,preference1,preference2,preference3,preference4,lat,lng,tg_username,is_online,updated_at,unlock_count'
-    const fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/users?select=${basicCols},invisible_until,invisible_purchased_at&limit=200`, { headers })
+    const fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?select=${basicCols},invisible_until,invisible_purchased_at&limit=200`, { headers })
     if (fallbackRes.ok) {
       const data = await fallbackRes.json() as DbUser[]
       return data.filter(u => u.lat && u.lng).map(u => ({ user: u, dist: haversineKm(lat, lng, u.lat!, u.lng!) })).sort((a, b) => a.dist - b.dist).slice(0, 100).map(d => d.user)
     }
-    const bareRes = await fetch(`${SUPABASE_URL}/rest/v1/users?select=${basicCols}&limit=200`, { headers })
+    const bareRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?select=${basicCols}&limit=200`, { headers })
     if (!bareRes.ok) { console.error('Bare minimum fetch also failed:', (await bareRes.text()).substring(0, 300)); return [] }
     const data = await bareRes.json() as DbUser[]
     return data.filter(u => u.lat && u.lng).map(u => ({ user: u, dist: haversineKm(lat, lng, u.lat!, u.lng!) })).sort((a, b) => a.dist - b.dist).slice(0, 100).map(d => d.user)
@@ -119,7 +119,7 @@ export async function fetchNearby(lat: number, lng: number, _radiusDegrees = 0.1
 export async function setOnlineStatus(userId: number, isOnline: boolean): Promise<void> {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ is_online: isOnline, updated_at: new Date().toISOString() }),
@@ -133,7 +133,7 @@ export async function setOnlineStatus(userId: number, isOnline: boolean): Promis
 export async function deleteUser(userId: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'DELETE',
       headers,
     })
@@ -149,13 +149,13 @@ export async function updateUnlockCount(userId: number, delta: number): Promise<
   if (!hasValidKey) return false
   try {
     // First fetch current value
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=unlock_count`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}&select=unlock_count`, { headers })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
     const current = (data[0]?.unlock_count || 0) as number
     const newVal = Math.max(0, current + delta)
 
-    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ unlock_count: newVal }),
@@ -171,7 +171,7 @@ export async function updateUnlockCount(userId: number, delta: number): Promise<
 export async function setUnlockCount(userId: number, value: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ unlock_count: Math.max(0, value) }),
@@ -187,7 +187,7 @@ export async function setUnlockCount(userId: number, value: number): Promise<boo
 export async function clearAllUsers(): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=not.is.null`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=not.is.null`, {
       method: 'DELETE',
       headers,
     })
@@ -203,7 +203,7 @@ export async function clearAllUsers(): Promise<boolean> {
 export async function fetchGlobalUnlock(): Promise<number> {
   if (!hasValidKey) return 0
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.0&select=name`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.0&select=name`, { headers })
     if (!res.ok) return 0
     const data = await res.json()
     const nameVal = data[0]?.name
@@ -219,14 +219,14 @@ export async function setGlobalUnlock(timestamp: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
     // Try PATCH first (user id=0 might exist)
-    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.0`, {
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.0`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ name: String(timestamp) }),
     })
     if (patchRes.ok) return true
     // If not found, insert config row (only id + name, rest are defaults)
-    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -264,7 +264,7 @@ export async function fetchUserUnlockStatus(userId: number): Promise<UnlockStatu
   try {
     // Try full columns first
     const fullCols = 'filters_unlocked,filters_unlocked_expires_at,edit_unlocked,edit_unlocked_expires_at,grid_rows_unlocked,invisible_until,hide_age_until,unlock_count,has_real_photo'
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=${fullCols}`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}&select=${fullCols}`, { headers })
     if (res.ok) {
       const data = await res.json()
       if (!data || data.length === 0) return null
@@ -283,7 +283,7 @@ export async function fetchUserUnlockStatus(userId: number): Promise<UnlockStatu
     }
     // Fallback: try basic columns
     const basicCols = 'filters_unlocked,filters_unlocked_expires_at'
-    const fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=${basicCols}`, { headers })
+    const fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}&select=${basicCols}`, { headers })
     if (!fallbackRes.ok) return null
     const data = await fallbackRes.json()
     if (!data || data.length === 0) return null
@@ -310,7 +310,7 @@ export async function fetchUserUnlockStatus(userId: number): Promise<UnlockStatu
 export async function updateUserRealPhoto(userId: number, hasRealPhoto: boolean): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ has_real_photo: hasRealPhoto }),
@@ -327,7 +327,7 @@ export async function updateUserRealPhoto(userId: number, hasRealPhoto: boolean)
 export async function setGridRowsUnlocked(userId: number, value: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ grid_rows_unlocked: value }),
@@ -342,7 +342,7 @@ export async function setGridRowsUnlocked(userId: number, value: number): Promis
 export async function updateInvisibleStatus(userId: number, until: string | null): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({
@@ -362,7 +362,7 @@ export async function updateInvisibleStatus(userId: number, until: string | null
 export async function updateHideAgeStatus(userId: number, until: string | null): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({
@@ -391,7 +391,7 @@ export interface FlyingMessage {
 export async function insertFlyingMessage(msg: { text: string; username: string; user_id: number; top_percent: number }): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/flying_messages`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_flying_messages`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify(msg),
@@ -407,7 +407,7 @@ export async function fetchFlyingMessages(since: string): Promise<FlyingMessage[
   if (!hasValidKey) return []
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/flying_messages?created_at=gte.${since}&order=created_at.desc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/lmn_flying_messages?created_at=gte.${since}&order=created_at.desc&limit=50`,
       { headers }
     )
     if (!res.ok) throw new Error(await res.text())
@@ -431,7 +431,7 @@ export async function setRaffleDrawToNextWednesday(raffleId: number): Promise<bo
     nextWed.setDate(now.getDate() + daysUntilWed)
     nextWed.setHours(20, 0, 0, 0)
     const endsAt = nextWed.toISOString()
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${raffleId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffles?id=eq.${raffleId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ ends_at: endsAt }),
@@ -462,7 +462,7 @@ export interface Raffle {
 export async function getActiveRaffle(): Promise<Raffle | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_active_raffle`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/lmn_get_active_raffle`, {
       headers
     })
     if (!res.ok) throw new Error(await res.text())
@@ -478,7 +478,7 @@ export async function getActiveRaffle(): Promise<Raffle | null> {
 export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<Raffle | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffles`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'return=representation' },
       body: JSON.stringify({
@@ -502,7 +502,7 @@ export async function buyRaffleTicket(raffleId: number, userId: number): Promise
   if (!hasValidKey) return false
   try {
     // Insert ticket
-    const ticketRes = await fetch(`${SUPABASE_URL}/rest/v1/raffle_tickets`, {
+    const ticketRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffle_tickets`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ raffle_id: raffleId, user_id: userId }),
@@ -510,7 +510,7 @@ export async function buyRaffleTicket(raffleId: number, userId: number): Promise
     if (!ticketRes.ok) throw new Error(await ticketRes.text())
 
     // Increment ticket count
-    const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${raffleId}`, {
+    const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffles?id=eq.${raffleId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({
@@ -535,7 +535,7 @@ export async function startRaffleCountdown(raffleId: number): Promise<boolean> {
     // If it's already past 8pm today, tomorrow8pm is correct
     // If it's before 8pm today, we still draw tomorrow (gives time for more tickets)
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${raffleId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffles?id=eq.${raffleId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({
@@ -557,7 +557,7 @@ export async function drawRaffleWinner(raffleId: number): Promise<{ user_id: num
   if (!hasValidKey) return null
   try {
     // Use RPC to pick a random ticket holder
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/draw_raffle_winner`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/lmn_draw_raffle_winner`, {
       method: 'POST',
       headers: { ...headers },
       body: JSON.stringify({ raffle_id: raffleId }),
@@ -575,7 +575,7 @@ export async function drawRaffleWinner(raffleId: number): Promise<{ user_id: num
 export async function completeRaffle(raffleId: number, winnerUserId: number, winnerName: string): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffles?id=eq.${raffleId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffles?id=eq.${raffleId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({
@@ -595,7 +595,7 @@ export async function completeRaffle(raffleId: number, winnerUserId: number, win
 export async function getRaffleTickets(raffleId: number): Promise<number> {
   if (!hasValidKey) return 0
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/raffle_tickets?raffle_id=eq.${raffleId}&select=*`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffle_tickets?raffle_id=eq.${raffleId}&select=*`, { headers })
     if (!res.ok) return 0
     const data = await res.json()
     return data.length || 0
@@ -620,7 +620,7 @@ export interface DbTopic {
 export async function fetchTopics(): Promise<DbTopic[]> {
   if (!hasValidKey) return []
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/topics?select=*&order=sort_order.asc`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_topics?select=*&order=sort_order.asc`, { headers })
     if (!res.ok) throw new Error(await res.text())
     return await res.json()
   } catch (err) {
@@ -650,7 +650,7 @@ export function checkRealPhoto(photoUrl: string | null | undefined): boolean {
 export async function updateRealPhotoStatus(userId: number, hasRealPhoto: boolean): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ has_real_photo: hasRealPhoto, photo_checked_at: new Date().toISOString() }),
@@ -665,7 +665,7 @@ export async function updateRealPhotoStatus(userId: number, hasRealPhoto: boolea
 export async function fetchUserPhotoStatus(userId: number): Promise<{ has_real_photo: boolean } | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?select=has_real_photo,photo_url&id=eq.${userId}&limit=1`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?select=has_real_photo,photo_url&id=eq.${userId}&limit=1`, { headers })
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
     return data?.[0] || null
@@ -678,7 +678,7 @@ export async function fetchUserPhotoStatus(userId: number): Promise<{ has_real_p
 export async function relockUserFeatures(userId: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/relock_user_features`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/lmn_relock_user_features`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ p_user_id: userId }),
@@ -694,7 +694,7 @@ export async function relockUserFeatures(userId: number): Promise<boolean> {
 export async function ensureFilterUnlock(userId: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=filters_unlocked_expires_at`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}&select=filters_unlocked_expires_at`, { headers })
     if (!res.ok) return false
     const data = await res.json()
     if (!data || data.length === 0) return false
@@ -702,7 +702,7 @@ export async function ensureFilterUnlock(userId: number): Promise<boolean> {
     if (current) return true // already has unlock, nothing to do
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ filters_unlocked_expires_at: expiresAt }),
