@@ -2408,18 +2408,18 @@ export default function App() {
             className="w-48 h-48 rounded-full object-cover"
           />
           <div className="text-center">
-            <h1 className="text-2xl font-bold gradient-text tracking-tight">HKMOD</h1>
-            <p className="text-[#8E8E93] text-xs mt-1">Hong Kong Members Only Dating Bot</p>
+            <h1 className="text-2xl font-bold gradient-text tracking-tight">LMN</h1>
+            <p className="text-[#8E8E93] text-xs mt-1">Let's Meet Now — Dating App</p>
           </div>
           <p className="text-[#8E8E93]/60 text-[9px] text-center leading-relaxed max-w-[320px]">
-            By using this app, you confirm you are 18+. HKMOD only connects users via Telegram.
+            By using this app, you confirm you are 18+. LMN only connects users via Telegram.
             We do not store messages. All chat happens in Telegram. You are responsible for your own safety when meeting others.
             We collect: Telegram profile, preferences, and approximate location (to show nearby users only).
-            We do not share data with third parties. Report issues: @HKMembersOnly
+            We do not share data with third parties.
           </p>
           <p className="text-[#8E8E93]/50 text-[8px] text-center leading-relaxed max-w-[320px] mt-2">
-            Features: Role matching (B/VB/V/VT/T/Side), Preference filters (Safe/Raw, Clean/Party, 1on1/Group, Host/Travel/Outdoor/Sauna),
-            Photo filters, Location-based discovery, Profile editing with 30-day lock, Stars payments for unlocks, Admin tools.
+            Features: Gender matching, Seeking preferences, Zodiac filters, Photo filters, Location-based discovery,
+            Profile editing, Stars payments for unlocks, Admin tools.
           </p>
         </div>
       </div>
