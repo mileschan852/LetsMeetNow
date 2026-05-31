@@ -1587,7 +1587,7 @@ function BottomNav({ lang, cooldownRemaining, onSend }: { lang: Lang; cooldownRe
 
   const handleRefer = () => {
     // Open Telegram native share dialog — user picks who to share with
-    const shareUrl = 'https://t.me/share/url?url=https://t.me/HKMO_D_Bot?startapp&text=Check%20out%20HKMOD%20-%20Hong%20Kong%20Members%20Only%20Dating!'
+    const shareUrl = 'https://t.me/share/url?url=https://t.me/LetsMsetNow_Bot?startapp&text=Check%20out%20LMN%20-%20Let%27s%20Meet%20Now%20Dating!'
     try {
       const tg = getTg()
       if (tg?.openTelegramLink) { tg.openTelegramLink(shareUrl); return }
@@ -1972,7 +1972,7 @@ export default function App() {
     const inTg = isInTelegram()
     const user = tg?.initDataUnsafe?.user
 
-    console.log('=== HKMOD Check === inTelegram:', inTg)
+    console.log('=== LMN Check === inTelegram:', inTg)
 
     // Admin bypass FIRST — always allow admins even outside Telegram
     if (isAdminUser(user)) {
@@ -1997,7 +1997,7 @@ export default function App() {
   useEffect(() => {
     const tg = getTg()
     const inTg = isInTelegram()
-    console.log('=== HKMOD Init === inTelegram:', inTg, 'WebApp:', !!tg)
+    console.log('=== LMN Init === inTelegram:', inTg, 'WebApp:', !!tg)
 
     if (tg) {
       tg.ready()
