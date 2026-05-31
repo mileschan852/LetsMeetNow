@@ -112,7 +112,7 @@ function isInTelegram(): boolean {
 // Only these Telegram usernames / IDs are admins. Bot owner is always included.
 // Add more here when requested.
 const ADMIN_IDS = [1231127407, 6837870949]
-const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly']
+const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly', 'MilesChan852', 'mileschan852']
 
 function isAdminUser(user: { id?: number; username?: string } | null | undefined): boolean {
   if (!user) return false

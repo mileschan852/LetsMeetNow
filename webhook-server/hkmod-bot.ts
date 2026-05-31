@@ -13,20 +13,45 @@ const SUPABASE_URL = process.env.SUPABASE_URL!
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!
 const WEBAPP_URL = process.env.HKMOD_WEBAPP_URL! // GitHub Pages URL
 
-const ADMIN_IDS = [1231127407, 6837870949]
-const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly']
+// ─── Owner & Admin Config ────────────────────────────────────────────
+// Owner is always admin, no need to add manually
+const OWNER_ID = parseInt(process.env.HKMOD_OWNER_ID || '0')
 
-function isAdmin(ctx: any): boolean {
+// Hardcoded fallback admins (also in app_admins table)
+const ADMIN_IDS = [1231127407, 6837870949]
+const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly', 'MilesChan852', 'mileschan852']
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+async function fetchAppAdmins(): Promise<string[]> {
+  try {
+    const { data } = await supabase.from('app_admins').select('username').eq('app', 'hkmod')
+    return (data || []).map(r => r.username.toLowerCase())
+  } catch {
+    return []
+  }
+}
+
+async function isAdmin(ctx: any): Promise<boolean> {
   const user = ctx.from
   if (!user) return false
+  // Owner always admin
+  if (OWNER_ID && user.id === OWNER_ID) return true
+  // Hardcoded IDs
   if (ADMIN_IDS.includes(user.id)) return true
+  // Hardcoded usernames
   if (user.username && ADMIN_USERNAMES.includes(user.username.toLowerCase())) return true
+  // Dynamic from DB
+  const dbAdmins = await fetchAppAdmins()
+  if (user.username && dbAdmins.includes(user.username.toLowerCase())) return true
   return false
 }
 
-// ─── Supabase Admin Client ─────────────────────────────────────────
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+function isOwner(ctx: any): boolean {
+  const user = ctx.from
+  if (!user) return false
+  return OWNER_ID ? user.id === OWNER_ID : false
+}
 
 // ─── Stars Prices ──────────────────────────────────────────────────
 
@@ -55,13 +80,64 @@ bot.command('start', async (ctx) => {
 
 // ─── Admin Commands ────────────────────────────────────────────────
 
+// /addAdmin [username] — owner only
+bot.command('addAdmin', async (ctx) => {
+  if (!isOwner(ctx)) {
+    await ctx.reply('❌ Only the bot owner can add admins.')
+    return
+  }
+  const args = ctx.message?.text?.split(' ').slice(1)
+  const username = args?.[0]?.replace(/^@/, '')
+  if (!username) {
+    await ctx.reply('Usage: /addAdmin \u003cusername\u003e')
+    return
+  }
+  const { error } = await supabase.from('app_admins').insert({
+    app: 'hkmod',
+    username: username.toLowerCase(),
+    added_by: ctx.from?.username || String(ctx.from?.id)
+  })
+  if (error) {
+    if (error.message.includes('duplicate')) {
+      await ctx.reply(`⚠️ @${username} is already an admin.`)
+      return
+    }
+    await ctx.reply(`❌ Error: ${error.message}`)
+    return
+  }
+  await ctx.reply(`✅ @${username} added as HKMOD admin.`)
+})
+
+// /deleteAdmin [username] — owner only
+bot.command('deleteAdmin', async (ctx) => {
+  if (!isOwner(ctx)) {
+    await ctx.reply('❌ Only the bot owner can remove admins.')
+    return
+  }
+  const args = ctx.message?.text?.split(' ').slice(1)
+  const username = args?.[0]?.replace(/^@/, '')
+  if (!username) {
+    await ctx.reply('Usage: /deleteAdmin \u003cusername\u003e')
+    return
+  }
+  const { error } = await supabase.from('app_admins')
+    .delete()
+    .eq('app', 'hkmod')
+    .eq('username', username.toLowerCase())
+  if (error) {
+    await ctx.reply(`❌ Error: ${error.message}`)
+    return
+  }
+  await ctx.reply(`✅ @${username} removed from HKMOD admins.`)
+})
+
 bot.command('raffle', async (ctx) => {
-  if (!isAdmin(ctx)) return
+  if (!(await isAdmin(ctx))) return
   const args = ctx.message?.text?.split(' ').slice(1)
   const prizeType = args?.[0] as 'filters' | 'invisible' | undefined
   
   if (!prizeType || !['filters', 'invisible'].includes(prizeType)) {
-    await ctx.reply('Usage: /raffle <filters|invisible>')
+    await ctx.reply('Usage: /raffle \u003cfilters|invisible\u003e')
     return
   }
   
@@ -80,12 +156,12 @@ bot.command('raffle', async (ctx) => {
 })
 
 bot.command('draw', async (ctx) => {
-  if (!isAdmin(ctx)) return
+  if (!(await isAdmin(ctx))) return
   const args = ctx.message?.text?.split(' ').slice(1)
   const raffleId = parseInt(args?.[0] || '0')
   
   if (!raffleId) {
-    await ctx.reply('Usage: /draw <raffle_id>')
+    await ctx.reply('Usage: /draw \u003craffle_id\u003e')
     return
   }
   
@@ -112,7 +188,7 @@ bot.command('draw', async (ctx) => {
 })
 
 bot.command('stats', async (ctx) => {
-  if (!isAdmin(ctx)) return
+  if (!(await isAdmin(ctx))) return
   
   const { count: userCount } = await supabase.from('users').select('*', { count: 'exact', head: true })
   const { count: onlineCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_online', true)
