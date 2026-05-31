@@ -551,9 +551,9 @@ function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock
       isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)`,
       `Purchased: ${gridRowsUnlocked} rows`,
       `Add a Telegram photo +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
+      `Boost LMN Channel +1~4`,
       `⭐ = charge stars per message`,
-      channelFollowUnlock ? `Group: +1 row ✅` : `Join @HKMembersOnlyChat +1`,
+      channelFollowUnlock ? `Group: +1 row ✅` : `Join LMN Channel +1`,
       `Buy rows with ⭐ Stars`,
     ],
     tc: [
@@ -561,9 +561,9 @@ function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock
       isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
       `已購: ${gridRowsUnlocked} 行`,
       `加入 Telegram 頭像 +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
+      `Boost LMN Channel +1~4`,
       `⭐ = 按訊息收費`,
-      channelFollowUnlock ? `群組: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`,
+      channelFollowUnlock ? `群組: +1 行 ✅` : `加入 LMN Channel +1`,
       `用 ⭐ 星星購買行數`,
     ],
     sc: [
@@ -571,9 +571,9 @@ function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock
       isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
       `已购: ${gridRowsUnlocked} 行`,
       `加入 Telegram 头像 +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
+      `Boost LMN Channel +1~4`,
       `⭐ = 按消息收费`,
-      channelFollowUnlock ? `群组: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`,
+      channelFollowUnlock ? `群组: +1 行 ✅` : `加入 LMN Channel +1`,
       `用 ⭐ 星星购买行数`,
     ],
     ru: [
@@ -581,9 +581,9 @@ function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock
       isPremium ? `Premium: +1 строка` : `Premium: +1 строка (не активен)`,
       `Куплено: ${gridRowsUnlocked} строк`,
       `Добавь фото в Telegram +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
+      `Boost LMN Channel +1~4`,
       `⭐ = плата за сообщение`,
-      channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в @HKMembersOnlyChat +1`,
+      channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в LMN Channel +1`,
       `Купить строки за ⭐`,
     ],
   }
@@ -1576,7 +1576,7 @@ function BottomNav({ lang, cooldownRemaining, onSend }: { lang: Lang; cooldownRe
   const [inputText, setInputText] = useState('')
 
   const handleGroupChat = () => {
-    const url = 'https://t.me/HKMembersOnlyChat'
+    const url = 'https://t.me/LetsMeetNow'
     try {
       const tg = getTg()
       if (tg?.openTelegramLink) { tg.openTelegramLink(url); return }
@@ -1912,11 +1912,11 @@ export default function App() {
     } catch { /* Worker failed, silently ignore */ }
   }
 
-  // ─── Channel Follow Unlock — +1 row for following @HKMO_D ─────────
+  // ─── Channel Follow Unlock — +1 row for following @LetsMsetNow_Bot ─────────
   const handleClaimChannelFollow = useCallback(async () => {
     if (channelFollowUnlock) return
     // Open the channel
-    const url = 'https://t.me/HKMO_D'
+    const url = 'https://t.me/LetsMsetNow_Bot'
     try {
       const tg = getTg()
       if (tg?.openTelegramLink) { tg.openTelegramLink(url) }
@@ -2386,7 +2386,7 @@ export default function App() {
     }
 
     // Open Telegram DM directly
-    const tgUrl = `https://t.me/${user.tgUsername || 'hkmembersonlychat'}`
+    const tgUrl = `https://t.me/${user.tgUsername || 'LetsMsetNow'}`
     const tg = getTg()
     if (tg?.openTelegramLink) { tg.openTelegramLink(tgUrl); return }
     if (tg?.openLink) { tg.openLink(tgUrl, { try_instant_view: false }); return }
@@ -2452,11 +2452,11 @@ export default function App() {
             <p className="text-[#8E8E93] text-sm mb-1">
               This app is exclusively for members of
             </p>
-            <p className="text-[#FF6B35] font-semibold text-sm mb-4">@hkmembersonlychat</p>
+            <p className="text-[#FF6B35] font-semibold text-sm mb-4">@LetsMsetNow</p>
             <button
               onClick={() => {
                 const tg2 = getTg()
-                const url = 'https://t.me/hkmembersonlychat'
+                const url = 'https://t.me/LetsMsetNow'
                 if (tg2?.openTelegramLink) {
                   tg2.openTelegramLink(url)
                 } else if (tg2?.openLink) {
