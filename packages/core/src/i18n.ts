@@ -360,7 +360,7 @@ export function tPref(lang: Lang, value: string): string {
   return t(lang, value.toLowerCase().replace(/\s+/g, ''))
 }
 
-export function tRole(lang: Lang, role: string): string {
+export function tRole(_lang: Lang, role: string): string {
   return role
 }
 
@@ -368,6 +368,6 @@ export function getLangLabel(lang: Lang): string {
   return { en: 'EN', tc: '繁', sc: '简', ru: 'RU' }[lang] || 'EN'
 }
 
-export function tZodiac(lang: Lang, sign: string): string {
+export function tZodiac(_lang: Lang, sign: string): string {
   return sign
 }

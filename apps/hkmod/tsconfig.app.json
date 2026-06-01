@@ -12,7 +12,11 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ]
+      ],
+      "dating-core": ["../../packages/core/src/index.ts"],
+      "dating-core/*": ["../../packages/core/src/*"],
+      "dating-ui": ["../../packages/ui/src/index.ts"],
+      "dating-ui/*": ["../../packages/ui/src/*"]
     },
     /* Bundler mode */
     "moduleResolution": "bundler",
