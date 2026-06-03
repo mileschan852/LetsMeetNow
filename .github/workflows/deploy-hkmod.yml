@@ -1,4 +1,5 @@
 name: Deploy HKMOD to GitHub Pages
+
 on:
   push:
     branches: [main]
@@ -8,16 +9,63 @@ on:
       - 'packages/ui/**'
       - '.github/workflows/deploy-hkmod.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages-hkmod"
+  cancel-in-progress: false
+
 jobs:
-  trigger-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger HKMO_D_Bot deployment
-        # Note: This requires a GH_PAT secret with repo scope.
-        # If not configured, HKMOD will still deploy via the hourly cron job in HKMO_D_Bot repo.
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      
+      - name: Install UI package dependencies
+        working-directory: packages/ui
+        run: npm ci
+      
+      - name: Install HKMOD dependencies
+        working-directory: apps/hkmod
+        run: npm ci
+      
+      - name: Build
+        working-directory: apps/hkmod
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/hkmod/dist
+
+  deploy:
+    environment:
+      name: github-pages-hkmod
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Trigger HKMO_D_Bot update (optional fallback)
+        # Keep the dispatch as a backup, but don't fail if GH_PAT is missing
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GH_PAT || '' }}
           repository: mileschan852/HKMO_D_Bot
           event-type: deploy-hkmod
           client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
+        continue-on-error: true
