@@ -22,7 +22,13 @@ window.onunhandledrejection = function(e: PromiseRejectionEvent) {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
+const rootEl = document.getElementById('root')
+if (!rootEl) throw new Error('No #root element')
+
+// Clear any existing content to prevent React 19 hydration mismatch
+rootEl.innerHTML = ''
+
+createRoot(rootEl).render(
   <StrictMode>
     <App />
   </StrictMode>,
