@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger HKMO_D_Bot deployment
+        # Note: This requires a GH_PAT secret with repo scope.
+        # If not configured, HKMOD will still deploy via the hourly cron job in HKMO_D_Bot repo.
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GH_PAT }}
