@@ -6,16 +6,18 @@ interface TgWebApp {
   setHeaderColor: (color: string) => void
   initData: string
   initDataUnsafe: {
-    user?: { id: number; first_name: string; last_name?: string; username?: string; photo_url?: string }
+    user?: { id: number; first_name: string; last_name?: string; username?: string; photo_url?: string; is_premium?: boolean }
+    start_param?: string
   }
   CloudStorage: {
     setItem: (key: string, value: string, cb?: (err: string | null, done: boolean) => void) => void
     getItems: (keys: string[], cb: (err: string | null, result: Record<string, string>) => void) => void
   }
   openTelegramLink: (url: string) => void
-  openLink: (url: string) => void
+  openLink: (url: string, options?: { try_instant_view?: boolean }) => void
+  openInvoice: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void
   close: () => void
-  showPopup: (params: { title?: string; message: string }, cb?: () => void) => void
+  showPopup: (params: { title?: string; message: string; buttons?: { id?: string; type?: 'default' | 'ok' | 'close' | 'cancel' | 'destructive'; text: string }[] }, cb?: (buttonId: string) => void) => void
   requestLocation?: (callback: (location: { latitude: number; longitude: number } | null) => void) => void
   HapticFeedback?: {
     impactOccurred: (style: 'light' | 'medium' | 'heavy') => void

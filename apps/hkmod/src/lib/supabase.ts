@@ -436,7 +436,7 @@ export async function setRaffleDrawToNextWednesday(raffleId: number): Promise<bo
 
 export interface Raffle {
   id: number
-  prize_type: string
+  prize_type: 'filters' | 'invisible'
   ticket_price: number
   target_tickets: number
   current_tickets: number

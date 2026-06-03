@@ -1,13 +1,13 @@
 // Telegram Stars Payment Integration
 // Creates invoice via Cloudflare Worker, handles fulfillment via webhook
 
-import { getTg, getUserId } from './storage'
+import { getTg } from './storage'
 
 export async function requestPayment(
   webhookUrl: string,
   userId: number,
   purpose: string,
-  price: number,
+  _price: number,
   onSuccess: () => void | Promise<void>,
   onError: (err: any) => void,
 ): Promise<void> {

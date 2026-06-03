@@ -1,25 +1,22 @@
+import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto } from 'dating-core'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
 import logoAnim from './assets/hkmod-logo-animated.mp4'
 import { t, tPref, type Lang, getLangLabel } from './lib/i18n'
 import {
-  Grid3X3,
-  Users,
   ArrowLeft,
   Check,
   MapPin,
   X,
   MessageCircle,
-  LocateFixed,
   AlertTriangle,
   Lock,
-  Gift,
-  Wallet,
   RefreshCw,
-  Send,
+  Users,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, type DbUser, type Raffle } from './lib/supabase'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -99,12 +96,14 @@ declare global {
   }
 }
 
-function getTg(): TgWebApp | undefined {
-  try { return window.Telegram?.WebApp } catch { return undefined }
+function formatRole(value: number, isSide: boolean): string {
+  if (isSide) return 'Side'
+  return value === 0 ? '0' : value === 1 ? '1' : String(value)
 }
 
-function isInTelegram(): boolean {
-  return !!getTg()?.initData
+function getGridRoleLabel(value: number, isSide: boolean): string {
+  if (isSide) return 'Side'
+  return value === 0 ? '0 (Bottom)' : value === 1 ? '1 (Top)' : String(value)
 }
 
 // ─── Admin Config ────────────────────────────────────────────────────
@@ -113,13 +112,6 @@ function isInTelegram(): boolean {
 // Add more here when requested.
 const ADMIN_IDS = [1231127407, 6837870949]
 const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly', 'MilesChan852', 'mileschan852']
-
-function isAdminUser(user: { id?: number; username?: string } | null | undefined): boolean {
-  if (!user) return false
-  if (user.id && ADMIN_IDS.includes(user.id)) return true
-  if (user.username && ADMIN_USERNAMES.includes(user.username)) return true
-  return false
-}
 
 // ─── Storage Keys ────────────────────────────────────────────────────
 
@@ -170,12 +162,6 @@ function cloudGetAll(keys: string[]): Promise<Record<string, string> | null> {
       resolve(result || {})
     })
   })
-}
-
-// localStorage fallback with user ID prefix
-function getUserId(): number | null {
-  const tg = getTg()
-  return tg?.initDataUnsafe?.user?.id || null
 }
 
 function userKey(key: string): string {
@@ -242,52 +228,9 @@ async function storageGetAll(): Promise<Record<string, string>> {
 
 // ─── Role Helpers ────────────────────────────────────────────────────
 
-function formatRole(value: number, isSide: boolean): string {
-  if (isSide) return 'Side'
-  if (value === 0) return '0 Bottom'
-  if (value === 1) return '1 Top'
-  if (value <= 0.4) return `${value.toFixed(1)} Versatile Bottom`
-  if (value === 0.5) return `${value.toFixed(1)} Versatile`
-  return `${value.toFixed(1)} Versatile Top`
-}
-
-// Short role label shown on grid (B, VB, V, VT, T, Side)
-function getGridRoleLabel(value: number, isSide: boolean): string {
-  if (isSide) return 'Side'
-  if (value === 0) return 'B'
-  if (value === 1) return 'T'
-  if (value <= 0.4) return 'VB'
-  if (value === 0.5) return 'V'
-  return 'VT'
-}
-
-
-
 // ─── Filter Logic ────────────────────────────────────────────────────
 
 type RoleFilterMode = 'All' | 'B' | 'VB' | 'V' | 'VT' | 'T' | 'Side'
-
-function getTimeAgo(updatedAt?: string): string {
-  if (!updatedAt) return ''
-  const ms = Date.now() - new Date(updatedAt).getTime()
-  const min = Math.floor(ms / 60000)
-  if (min < 1) return 'now'
-  if (min < 60) return `${min}m`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h`
-  const day = Math.floor(hr / 24)
-  return `${day}d`
-}
-
-// Online: own profile always active (user is using app). Others: updated within 1 hour.
-function isUserActive(user: UserProfile): boolean {
-  if (user.isOwn) return true
-  if (!user.updatedAt) return false
-  return Date.now() - new Date(user.updatedAt).getTime() < 60 * 60 * 1000
-}
-
-// ─── Filter Logic ────────────────────────────────────────────────────
-
 
 function getFilterColor(mode: RoleFilterMode): string {
   const colors: Record<RoleFilterMode, string> = {
@@ -303,21 +246,6 @@ function getFilterColor(mode: RoleFilterMode): string {
 }
 
 // ─── Distance
-
-function getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371e3
-  const toRad = (x: number) => x * Math.PI / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function formatDist(d: number): string {
-  if (d === 0) return '0m'
-  if (d < 1000) return `${Math.round(d)}m`
-  return `${(d / 1000).toFixed(1)}km`
-}
 
 // ─── DbUser → UserProfile ────────────────────────────────────────────
 
@@ -438,63 +366,6 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
           {user.openToMessages && <span className="font-bold text-yellow-400">⭐ {t(lang, 'message')}</span>}
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Location Gate ────────────────────────────────────────────────────
-
-function LocationGate({ onGranted, lang }: { onGranted: (lat: number, lng: number) => void; lang: Lang }) {
-  const [status, setStatus] = useState<'checking' | 'needed' | 'requesting' | 'denied'>('checking')
-
-  const requestLocation = () => {
-    setStatus('requesting')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { onGranted(pos.coords.latitude, pos.coords.longitude) },
-      () => { setStatus('denied') },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    )
-  }
-
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => onGranted(pos.coords.latitude, pos.coords.longitude),
-      () => setStatus('needed'),
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-    )
-  }, [onGranted])
-
-  if (status === 'checking') {
-    return (
-      <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-        <LocateFixed className="w-12 h-12 text-[#FF6B35] animate-pulse mb-4" />
-        <p className="text-white font-semibold">{t(lang, 'checkingLoc')}</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center px-6" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <div className="w-16 h-16 rounded-full bg-[#FF6B35]/10 flex items-center justify-center mb-4">
-        <LocateFixed className="w-8 h-8 text-[#FF6B35]" />
-      </div>
-      <h2 className="text-xl font-bold text-white mb-2">{t('en', 'locationRequired')}</h2>
-      <p className="text-[#8E8E93] text-sm text-center mb-6">
-        {t(lang, 'locationDesc')}
-      </p>
-      {status === 'denied' && (
-        <div className="bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-4 mb-4 w-full max-w-sm">
-          <p className="text-[#FF6B35] text-sm font-semibold mb-1">{t(lang, 'permissionDenied')}</p>
-          <p className="text-[#8E8E93] text-xs">{t(lang, 'enableLocation')}</p>
-        </div>
-      )}
-      <button onClick={requestLocation} disabled={status === 'requesting'} className="w-full max-w-sm h-12 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center justify-center gap-2">
-        <LocateFixed className="w-4 h-4" />
-        {status === 'requesting' ? t(lang, 'checkingLoc') : t(lang, 'tapToRetry')}
-      </button>
-      <button onClick={() => onGranted(22.3193, 114.1694)} className="mt-3 text-[#8E8E93] text-xs underline">
-        Continue without location
-      </button>
     </div>
   )
 }
@@ -1122,16 +993,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
 // ─── 30-day lock helper ──────────────────────────────────────────────
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
-
-function isPrefLocked(lastSavedAt: number, globalUnlockAt: number): boolean {
-  // Always unlocked: preference4 (Host/Travel), preference2 Party↔Party✓ transitions
-  // Locked if: saved within last 30 days AND no admin release after that save
-  if (lastSavedAt === 0) return false // Never saved = unlocked
-  if (globalUnlockAt >= lastSavedAt) return false // Admin released after user's last save
-  return Date.now() - lastSavedAt < THIRTY_DAYS_MS // Locked if saved < 30 days ago
-}
-
 // ─── Own Profile Screen with SAVE button ──────────────────────────────
 
 function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }: {
@@ -1431,307 +1292,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
   )
 }
 
-// ─── Dot Matrix Raffle Status Display ────────────────────────────────
-// LED marquee: cycles between message (5s) and countdown (5s).
-// Countdown targets 8pm next day (ends_at field).
-// Shows winner announcement when raffle is completed.
-
-function RaffleStatusDisplay({ raffle, lang }: { raffle: Raffle | null; lang: Lang }) {
-  const [timeLeft, setTimeLeft] = useState(0)
-  const [showCountdown, setShowCountdown] = useState(false)
-
-  // Countdown timer effect — targets raffle.ends_at (8pm next day)
-  useEffect(() => {
-    if (!raffle?.ends_at || raffle.status !== 'active') {
-      setTimeLeft(0)
-      return
-    }
-    const update = () => {
-      const end = new Date(raffle.ends_at!).getTime()
-      setTimeLeft(Math.max(0, end - Date.now()))
-    }
-    update()
-    const interval = setInterval(update, 1000)
-    return () => clearInterval(interval)
-  }, [raffle?.ends_at, raffle?.status])
-
-  // Cycle: message marquee (5s) ↔ countdown (5s) only when active
-  useEffect(() => {
-    if (!raffle || raffle.status !== 'active') {
-      setShowCountdown(false)
-      return
-    }
-    const cycle = setInterval(() => {
-      setShowCountdown(prev => !prev)
-    }, 5000)
-    return () => clearInterval(cycle)
-  }, [raffle?.status])
-
-  // ── Build message text ──
-  let messageText = ''
-  let isRed = false
-
-  if (!raffle || raffle.status === 'completed') {
-    if (raffle?.winner_name) {
-      const prizeLabel = raffle.prize_type === 'filters' ? '🔓 FILTER' : '👁️ INVISIBLE'
-      messageText = `${t(lang, 'raffleWinnerCongrats')}: ${raffle.winner_name} — ${prizeLabel}`
-      isRed = false
-    } else {
-      messageText = t(lang, 'raffleNoDraws')
-      isRed = true
-    }
-  } else if (raffle.status === 'pending') {
-    const prizeLabel = raffle.prize_type === 'filters' ? '🔓 FILTER' : '👁️ INVISIBLE'
-    const price = raffle.ticket_price || 100
-    messageText = `${price}★ ${prizeLabel} — ${t(lang, 'raffleForSale')}`
-    isRed = false
-  } else if (raffle.status === 'active') {
-    const prizeLabel = raffle.prize_type === 'filters' ? '🔓 FILTER' : '👁️ INVISIBLE'
-    messageText = `${t(lang, 'raffleLive')} — ${prizeLabel}`
-    isRed = false
-  }
-
-  // ── Countdown text ──
-  const h = Math.floor(timeLeft / 3600000)
-  const m = Math.floor((timeLeft % 3600000) / 60000)
-  const s = Math.floor((timeLeft % 60000) / 1000)
-  const countdownText = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-
-  const neonColor = isRed ? '#FF4444' : '#00FF41'
-  const neonShadow = isRed
-    ? '0 0 4px #FF4444, 0 0 8px #FF4444'
-    : '0 0 4px #00FF41, 0 0 8px #00FF41, 0 0 12px #00CC33'
-  const borderColor = isRed ? 'rgba(255,68,68,0.35)' : 'rgba(0,255,65,0.3)'
-  const insetGlow = isRed
-    ? 'inset 0 0 8px rgba(255,68,68,0.15)'
-    : 'inset 0 0 8px rgba(0,255,65,0.15)'
-
-  const displayCountdown = raffle?.status === 'active' && showCountdown && timeLeft > 0
-
-  return (
-    <div
-      className="relative overflow-hidden rounded bg-black/85"
-      style={{
-        width: '90px',
-        height: '22px',
-        border: `1px solid ${borderColor}`,
-        boxShadow: `${insetGlow}, 0 0 4px ${borderColor}`,
-      }}
-    >
-      {/* ── Marquee message (scrolls R → L) ── */}
-      {!displayCountdown && (
-        <div className="absolute inset-0 flex items-center" style={{ overflow: 'hidden' }}>
-          <span
-            className="whitespace-nowrap text-[11px] font-bold tracking-wider absolute"
-            style={{
-              fontFamily: '"Courier New", "Consolas", monospace',
-              color: neonColor,
-              textShadow: neonShadow,
-              animation: 'marquee-scroll 4s linear infinite',
-            }}
-          >
-            {messageText}
-          </span>
-        </div>
-      )}
-
-      {/* ── Static countdown ── */}
-      {displayCountdown && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span
-            className="text-[11px] font-bold tracking-widest"
-            style={{
-              fontFamily: '"Courier New", "Consolas", monospace',
-              color: neonColor,
-              textShadow: neonShadow,
-            }}
-          >
-            {countdownText}
-          </span>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Raffle Button Component ─────────────────────────────────────────
-
-function RaffleButton({
-  raffle,
-  isAdmin,
-  onBuyTicket,
-  onStartNextRaffle,
-  lang,
-}: {
-  raffle: Raffle | null
-  isAdmin: boolean
-  onBuyTicket: () => void
-  onStartNextRaffle: () => void
-  lang: Lang
-}) {
-  // No raffle active — greyed out, admin can click to auto-start next raffle
-  if (!raffle || raffle.status === 'completed') {
-    return (
-      <button
-        onClick={() => {
-          if (isAdmin) onStartNextRaffle()
-        }}
-        className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
-          isAdmin
-            ? 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E] hover:bg-yellow-500/10 hover:text-yellow-400 hover:border-yellow-500/30'
-            : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E] opacity-50'
-        }`}
-        title={isAdmin ? t(lang, 'raffleStartNext') : t(lang, 'raffleNoDraws')}
-      >
-        🎁
-      </button>
-    )
-  }
-
-  // Pending raffle — show ticket count, clickable to buy
-  if (raffle.status === 'pending') {
-    const ticketInfo = `${raffle.current_tickets}/${raffle.target_tickets}`
-    return (
-      <button
-        onClick={onBuyTicket}
-        className="h-7 rounded-full flex items-center justify-center nav-press text-[10px] border px-1.5 gap-1 bg-yellow-500/20 text-yellow-400 border-yellow-500/40"
-        title={`${t(lang, 'raffleBuyTicket')} — ${ticketInfo}`}
-      >
-        🎁
-        <span className="text-[9px] font-bold">{ticketInfo}</span>
-      </button>
-    )
-  }
-
-  // Active raffle — pulsing, clickable to buy
-  const ticketInfo = `${raffle.current_tickets}/${raffle.target_tickets}`
-  return (
-    <button
-      onClick={onBuyTicket}
-      className="h-7 rounded-full flex items-center justify-center nav-press text-[10px] border px-1.5 gap-1 bg-gradient-to-r from-yellow-500/30 to-orange-500/30 text-yellow-300 border-yellow-500/40 animate-pulse"
-      title={`${t(lang, 'raffleBuyTicket')} — ${ticketInfo}`}
-    >
-      🎁
-      <span className="text-[9px] font-bold">{ticketInfo}</span>
-    </button>
-  )
-}
-
 // ─── Flying Messages Overlay ─────────────────────────────────────────
-
-function FlyingMessagesOverlay({ messages, onDone }: { messages: {id: number; text: string; top: string}[]; onDone: (id: number) => void }) {
-  useEffect(() => {
-    messages.forEach(m => {
-      setTimeout(() => onDone(m.id), 60000) // remove after 60s
-    })
-  }, [messages, onDone])
-
-  return (
-    <div className="fixed inset-0 z-[90] pointer-events-none overflow-hidden" aria-hidden="true">
-      {messages.map(m => (
-        <div
-          key={m.id}
-          className="flying-message absolute whitespace-nowrap text-sm font-bold text-white/90 drop-shadow-lg"
-          style={{ top: m.top }}
-        >
-          {m.text}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ─── Bottom Nav ──────────────────────────────────────────────────────
-
-// ─── Bottom Nav ─────────────────────────────────────────────────────-
-
-function BottomNav({ lang, cooldownRemaining, onSend }: { lang: Lang; cooldownRemaining: number; onSend: (text: string) => void }) {
-  const [inputText, setInputText] = useState('')
-
-  const handleGroupChat = () => {
-    const url = 'https://t.me/HKMembersOnlyChat'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(url); return }
-      if (tg?.openLink) { tg.openLink(url, { try_instant_view: false }); return }
-    } catch {}
-    window.open(url, '_blank')
-  }
-
-  const handleRefer = () => {
-    // Open Telegram native share dialog — user picks who to share with
-    const shareUrl = 'https://t.me/share/url?url=https://t.me/HKMO_D_Bot?startapp&text=Check%20out%20HKMOD%20-%20Hong%20Kong%20Members%20Only%20Dating!'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(shareUrl); return }
-    } catch {}
-    window.open(shareUrl, '_blank')
-  }
-
-  const handleWallet = () => {
-    const tonUrl = 'https://t.me/wallet?startattach=transfer_UQD9Irrhhpj2aAa48W-XaL5q9vPD9Zf5UjXhC7aHcYcSnYo4'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(tonUrl); return }
-    } catch {}
-    window.open(tonUrl, '_blank')
-  }
-
-  const handleSend = () => {
-    if (!inputText.trim() || cooldownRemaining > 0) return
-    const text = inputText.trim()
-    onSend(text) // trigger flying animation + Supabase store
-    setInputText('')
-  }
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-xl border-t border-[#2C2C2E]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <div className="max-w-[min(520px,100vw)] mx-auto">
-        {/* Input row above bottom nav */}
-        <div className="flex items-center gap-2 px-3 py-2">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            onFocus={(e) => { if (e.target.placeholder === '發送彈幕') e.target.placeholder = '' }}
-            onBlur={(e) => { if (!e.target.value) e.target.placeholder = '發送彈幕' }}
-            placeholder="發送彈幕"
-            className="flex-1 h-9 px-3 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] text-sm text-white placeholder-[#8E8E93] focus:outline-none focus:border-[#FF6B35]/50"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!inputText.trim()}
-            className="w-9 h-9 rounded-full bg-[#FF6B35] flex items-center justify-center nav-press disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Send className="w-4 h-4 text-white" />
-          </button>
-        </div>
-        {/* Bottom nav buttons */}
-        <nav className="h-14 flex items-center justify-around">
-          <button className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Grid3X3 className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'profiles')}</span>
-          </button>
-          <button onClick={handleGroupChat} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Users className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'groupChat')}</span>
-          </button>
-          <button onClick={handleRefer} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Gift className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'refer')}</span>
-          </button>
-          <button onClick={handleWallet} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Wallet className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'wallet')}</span>
-          </button>
-        </nav>
-      </div>
-    </div>
-  )
-}
-
-// ─── App Component ───────────────────────────────────────────────────
 
 export default function App() {
   const [view, setView] = useState<View>('MAIN')
@@ -1751,18 +1312,7 @@ export default function App() {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [groupCheck, setGroupCheck] = useState<'checking' | 'member' | 'not_member'>('checking')
-  // Default language from Telegram, fallback to English
-  function getDefaultLang(): Lang {
-    try {
-      const code = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'en'
-      if (code === 'zh-hant' || code === 'zh-hk' || code === 'zh-tw') return 'tc'
-      if (code === 'zh-hans' || code === 'zh-cn') return 'sc'
-      if (code === 'ru') return 'ru'
-      return 'en'
-    } catch {
-      return 'en'
-    }
-  }
+
   const [lang, setLang] = useState<Lang>(getDefaultLang())
   const [starsPaidFor, setStarsPaidFor] = useState<Set<string>>(new Set())
   const [filtersUnlocked, setFiltersUnlocked] = useState(false)
@@ -1775,28 +1325,6 @@ export default function App() {
   const isInvisible = invisibleActive && (invisibleUntil ? new Date(invisibleUntil).getTime() > Date.now() : false)
   const hasPurchasedInvisible = invisibleUntil !== null
   const [raffle, setRaffle] = useState<Raffle | null>(null)
-
-  // Detect if user's avatar is a real photo or initials/emoji
-  // Telegram initials/emoji avatars are SVG; real photos are JPEG/PNG
-  const detectRealPhoto = useCallback(async (imageUrl: string): Promise<boolean> => {
-    if (!imageUrl) return false
-    // Fast path: URL suffix check
-    const lower = imageUrl.toLowerCase()
-    if (lower.endsWith('.svg')) return false // SVG = initials/emoji
-    if (lower.match(/\.(jpg|jpeg|png|gif|webp)$/)) return true // Raster = real photo
-    // Slow path: try HEAD request to check Content-Type
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 3000)
-      const res = await fetch(imageUrl, { method: 'HEAD', signal: ctrl.signal })
-      clearTimeout(timer)
-      const ct = res.headers.get('Content-Type') || ''
-      return ct.includes('image/jpeg') || ct.includes('image/png') || ct.includes('image/webp') || ct.includes('image/gif')
-    } catch {
-      // If all else fails, assume real photo (better to show than hide)
-      return true
-    }
-  }, [])
 
   // Flying messages: shared across all users via Supabase
   const [flyingMessages, setFlyingMessages] = useState<{id: number; text: string; top: string}[]>([])
@@ -2048,7 +1576,7 @@ export default function App() {
     console.log('=== HKMOD Check === inTelegram:', inTg)
 
     // Admin bypass FIRST — always allow admins even outside Telegram
-    if (isAdminUser(user)) {
+    if (isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)) {
       console.log('  result: ADMIN BYPASS')
       setGroupCheck('member')
       return
@@ -2083,7 +1611,7 @@ export default function App() {
       if (user) {
         tgUserId.current = user.id
         setIsPremium(!!user.is_premium)
-        const adminCheck = isAdminUser(user)
+        const adminCheck = isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)
         console.log(`Admin check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
         setIsAdmin(adminCheck)
         const photoUrl = user.photo_url || ''

@@ -371,3 +371,15 @@ export function getLangLabel(lang: Lang): string {
 export function tZodiac(_lang: Lang, sign: string): string {
   return sign
 }
+
+export function getDefaultLang(): Lang {
+  try {
+    const code = (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'en'
+    if (code === 'zh-hant' || code === 'zh-hk' || code === 'zh-tw') return 'tc'
+    if (code === 'zh-hans' || code === 'zh-cn') return 'sc'
+    if (code === 'ru') return 'ru'
+    return 'en'
+  } catch {
+    return 'en'
+  }
+}

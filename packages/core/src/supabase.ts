@@ -13,48 +13,6 @@ const headers = {
   'Prefer': 'return=representation',
 }
 
-// ─── Zodiac ──────────────────────────────────────────────────────────
-
-export function getZodiac(dob: string): string {
-  const d = new Date(dob)
-  const m = d.getMonth() + 1
-  const day = d.getDate()
-  if ((m === 1 && day >= 20) || (m === 2 && day <= 18)) return 'Aquarius'
-  if ((m === 2 && day >= 19) || (m === 3 && day <= 20)) return 'Pisces'
-  if ((m === 3 && day >= 21) || (m === 4 && day <= 19)) return 'Aries'
-  if ((m === 4 && day >= 20) || (m === 5 && day <= 20)) return 'Taurus'
-  if ((m === 5 && day >= 21) || (m === 6 && day <= 20)) return 'Gemini'
-  if ((m === 6 && day >= 21) || (m === 7 && day <= 22)) return 'Cancer'
-  if ((m === 7 && day >= 23) || (m === 8 && day <= 22)) return 'Leo'
-  if ((m === 8 && day >= 23) || (m === 9 && day <= 22)) return 'Virgo'
-  if ((m === 9 && day >= 23) || (m === 10 && day <= 22)) return 'Libra'
-  if ((m === 10 && day >= 23) || (m === 11 && day <= 21)) return 'Scorpio'
-  if ((m === 11 && day >= 22) || (m === 12 && day <= 21)) return 'Sagittarius'
-  return 'Capricorn'
-}
-
-export function getZodiacEmoji(sign: string): string {
-  const map: Record<string, string> = {
-    Aries: '\u2648', Taurus: '\u2649', Gemini: '\u264A', Cancer: '\u264B',
-    Leo: '\u264C', Virgo: '\u264D', Libra: '\u264E', Scorpio: '\u264F',
-    Sagittarius: '\u2650', Capricorn: '\u2651', Aquarius: '\u2652', Pisces: '\u2653',
-  }
-  return map[sign] || '\u2B50'
-}
-
-export function getAge(dob: string): number {
-  const birth = new Date(dob)
-  const now = new Date()
-  let age = now.getFullYear() - birth.getFullYear()
-  const m = now.getMonth() - birth.getMonth()
-  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
-  return age
-}
-
-export function isMonthlyEditUnlocked(): boolean {
-  return new Date().getDate() === 1
-}
-
 // ─── DB Types ────────────────────────────────────────────────────────
 
 export interface DbUser {
@@ -99,14 +57,15 @@ export interface DbUser {
 export interface Raffle {
   id: number
   prize_type: 'filters' | 'invisible'
-  status: 'waiting' | 'active' | 'complete'
+  ticket_price: number
   target_tickets: number
-  tickets_sold: number
-  winner_id: number | null
-  winner_name: string | null
-  created_at: string
-  completed_at: string | null
+  current_tickets: number
+  status: 'pending' | 'active' | 'completed'
+  countdown_started_at: string | null
   ends_at: string | null
+  winner_user_id: number | null
+  winner_name: string | null
+  drawn_at: string | null
 }
 
 // ─── Distance ────────────────────────────────────────────────────────
@@ -206,31 +165,6 @@ export interface FlyingMessage {
   created_at: string
 }
 
-export async function insertFlyingMessage(userId: number, userName: string, text: string): Promise<boolean> {
-  if (!hasValidKey) return false
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/flying_messages`, {
-      method: 'POST',
-      headers: { ...headers, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ user_id: userId, user_name: userName, text }),
-    })
-    return res.ok
-  } catch { return false }
-}
-
-export async function fetchFlyingMessages(since?: string): Promise<FlyingMessage[]> {
-  if (!hasValidKey) return []
-  try {
-    let url = `${SUPABASE_URL}/rest/v1/flying_messages?order=created_at.desc&limit=50`
-    if (since) url += `&created_at=gte.${since}`
-    const res = await fetch(url, { headers })
-    if (!res.ok) return []
-    return await res.json()
-  } catch { return [] }
-}
-
-// ─── Travel Directory ────────────────────────────────────────────────
-
 export interface TravelEntry {
   id: number
   country: 'Hong Kong' | 'Taiwan' | 'Thailand'
@@ -267,18 +201,6 @@ export async function getActiveRaffle(): Promise<Raffle | null> {
     const data = await res.json()
     return data?.[0] || null
   } catch { return null }
-}
-
-export async function buyRaffleTicket(userId: number, userName: string): Promise<boolean> {
-  if (!hasValidKey) return false
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/buy_raffle_ticket`, {
-      method: 'POST',
-      headers: { ...headers, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ p_user_id: userId, p_user_name: userName }),
-    })
-    return res.ok
-  } catch { return false }
 }
 
 export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<Raffle | null> {
@@ -589,7 +511,7 @@ export async function drawRaffleWinner(raffleId: number): Promise<{ user_id: num
     if (!res.ok) return null
     const data = await res.json()
     if (!data || !data.id) return null
-    return { id: data.id, name: data.name || 'Unknown' }
+    return { user_id: data.id, name: data.name || 'Unknown' }
   } catch { return null }
 }
 
