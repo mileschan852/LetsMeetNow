@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'apps/lmn/**'
+      - 'packages/core/**'
+      - 'packages/ui/**'
       - '.github/workflows/lmn-deploy.yml'
   workflow_dispatch:
 
@@ -25,11 +27,14 @@ jobs:
       
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: apps/lmn/package-lock.json
       
-      - name: Install dependencies
+      - name: Install UI package dependencies
+        working-directory: packages/ui
+        run: npm ci
+      
+      - name: Install LMN dependencies
         working-directory: apps/lmn
         run: npm ci
       

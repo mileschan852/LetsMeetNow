@@ -27,7 +27,11 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - name: Install dependencies
+      - name: Install UI package dependencies
+        run: |
+          cd packages/ui
+          npm ci
+      - name: Install HKMOD dependencies
         run: |
           cd apps/hkmod
           npm ci
