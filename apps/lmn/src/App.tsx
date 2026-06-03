@@ -1025,6 +1025,17 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
     setSaved(false)
   }
 
+  // Profile is considered "saved" when DOB, height, and weight are all set
+  const hasSavedProfile = !!profile.dob && profile.height > 0 && profile.weight > 0
+
+  // Helper to render a field label with lock indicator
+  const FieldLabel = ({ label, locked }: { label: string, locked?: boolean }) => (
+    <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5 flex items-center gap-1">
+      {label}
+      {locked && <Lock className="w-3 h-3 text-[#FF6B35]" />}
+    </span>
+  )
+
   const handleSave = async () => {
     if (!draft.height || draft.height <= 0 || !draft.weight || draft.weight <= 0) {
       alert('Please enter height and weight')
@@ -1068,6 +1079,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
       await storageSet(CLOUD.seekingTodayChangedAt, String(Date.now()))
     }
 
+    await storageSet(CLOUD.dob, draft.dob || '')
     await storageSet(CLOUD.height, String(draft.height))
     await storageSet(CLOUD.weight, String(draft.weight))
     await storageSet(CLOUD.pref1, draft.gender || 'Male')
@@ -1134,20 +1146,20 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         <div className="h-px bg-[#2C2C2E] mb-3" />
 
         {/* Gender */}
-        <div className="mb-3">
-          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Gender</span>
+        <div className={`mb-3 ${hasSavedProfile ? 'opacity-60' : ''}`}>
+          <FieldLabel label="Gender" locked={hasSavedProfile} />
           <div className="flex gap-2">
-            <button onClick={() => updateDraft('gender', 'Male')} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.gender === 'Male' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>Male</button>
-            <button onClick={() => updateDraft('gender', 'Female')} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.gender === 'Female' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>Female</button>
+            <button disabled={hasSavedProfile} onClick={() => updateDraft('gender', 'Male')} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.gender === 'Male' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'} ${hasSavedProfile ? 'cursor-not-allowed' : ''}`}>Male</button>
+            <button disabled={hasSavedProfile} onClick={() => updateDraft('gender', 'Female')} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.gender === 'Female' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'} ${hasSavedProfile ? 'cursor-not-allowed' : ''}`}>Female</button>
           </div>
         </div>
 
         {/* Seeking Gender */}
-        <div className="mb-3">
-          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Seeking</span>
+        <div className={`mb-3 ${hasSavedProfile ? 'opacity-60' : ''}`}>
+          <FieldLabel label="Seeking" locked={hasSavedProfile} />
           <div className="flex gap-2">
             {(['Men','Women','Both'] as const).map(g => (
-              <button key={g} onClick={() => updateDraft('seekingGender', g)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.seekingGender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+              <button key={g} disabled={hasSavedProfile} onClick={() => updateDraft('seekingGender', g)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.seekingGender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'} ${hasSavedProfile ? 'cursor-not-allowed' : ''}`}>
                 {g}
               </button>
             ))}
@@ -1155,13 +1167,14 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         </div>
 
         {/* Date of Birth + Hide Age */}
-        <div className="mb-3">
-          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Date of Birth</span>
+        <div className={`mb-3 ${hasSavedProfile ? 'opacity-60' : ''}`}>
+          <FieldLabel label="Date of Birth" locked={hasSavedProfile} />
           <input
             type="date"
             value={draft.dob || ''}
-            onChange={(e) => updateDraft('dob', e.target.value)}
-            className="w-full h-10 px-3 bg-[#1A1A1A] rounded-lg text-white text-sm outline-none border border-[#2C2C2E] focus:border-[#FF6B35]/50"
+            readOnly={hasSavedProfile}
+            onChange={(e) => !hasSavedProfile && updateDraft('dob', e.target.value)}
+            className={`w-full h-10 px-3 bg-[#1A1A1A] rounded-lg text-white text-sm outline-none border border-[#2C2C2E] focus:border-[#FF6B35]/50 ${hasSavedProfile ? 'cursor-not-allowed' : ''}`}
           />
           <label className="flex items-center gap-2 cursor-pointer mt-2">
             <input type="checkbox" checked={!!draft.hideAge}
@@ -1173,20 +1186,22 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         </div>
 
         {/* Height & Weight */}
-        <div className="mb-3">
-          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Height / Weight</span>
+        <div className={`mb-3 ${hasSavedProfile ? 'opacity-60' : ''}`}>
+          <FieldLabel label="Height / Weight" locked={hasSavedProfile} />
           <div className="flex gap-2">
             <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
               <span className="text-xs text-[#8E8E93] font-medium uppercase">Height</span>
               <input type="number" value={draft.height || ''} placeholder="0"
-                onChange={(e) => updateDraft('height', parseInt(e.target.value) || 0)}
-                className="bg-transparent text-white text-sm font-medium text-right outline-none w-16" />
+                readOnly={hasSavedProfile}
+                onChange={(e) => !hasSavedProfile && updateDraft('height', parseInt(e.target.value) || 0)}
+                className={`bg-transparent text-white text-sm font-medium text-right outline-none w-16 ${hasSavedProfile ? 'cursor-not-allowed' : ''}`} />
             </div>
             <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
               <span className="text-xs text-[#8E8E93] font-medium uppercase">Weight</span>
               <input type="number" value={draft.weight || ''} placeholder="0"
-                onChange={(e) => updateDraft('weight', parseInt(e.target.value) || 0)}
-                className="bg-transparent text-white text-sm font-medium text-right outline-none w-16" />
+                readOnly={hasSavedProfile}
+                onChange={(e) => !hasSavedProfile && updateDraft('weight', parseInt(e.target.value) || 0)}
+                className={`bg-transparent text-white text-sm font-medium text-right outline-none w-16 ${hasSavedProfile ? 'cursor-not-allowed' : ''}`} />
             </div>
           </div>
         </div>
