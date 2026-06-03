@@ -1998,7 +1998,7 @@ export default function App() {
   // Splash screen
   if (showSplash) {
     return (
-      <div className="min-h-[100dvh] bg-[#0A0A0A] flex items-center justify-center px-6">
+      <div className="min-h-[100vh] bg-[#0A0A0A] flex items-center justify-center px-6">
         <div className="w-full max-w-[min(520px,100vw)] flex flex-col items-center justify-center gap-5">
           <video
             src={logoAnim}
@@ -2029,8 +2029,8 @@ export default function App() {
 
   if (groupCheck === 'checking') {
     return (
-      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
-        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] flex items-center justify-center">
+      <div className="min-h-[100vh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100vh] flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
         </div>
       </div>
@@ -2043,8 +2043,8 @@ export default function App() {
     const raw = tg ? JSON.stringify(tg.initDataUnsafe, null, 2) : 'no Telegram WebApp'
 
     return (
-      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
-        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] relative flex flex-col px-6 pt-16 pb-6 overflow-y-auto">
+      <div className="min-h-[100vh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100vh] relative flex flex-col px-6 pt-16 pb-6 overflow-y-auto">
           <div className="flex flex-col items-center text-center flex-shrink-0">
             <div className="w-16 h-16 rounded-full bg-[#FF6B35]/10 flex items-center justify-center mb-4">
               <Lock className="w-8 h-8 text-[#FF6B35]" />
@@ -2093,8 +2093,8 @@ export default function App() {
 
   if (!locationGranted) {
     return (
-      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
-        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] relative">
+      <div className="min-h-[100vh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100vh] relative">
           <LocationGate onGranted={handleLocationGranted} lang={lang} />
         </div>
       </div>
@@ -2107,8 +2107,8 @@ export default function App() {
         messages={flyingMessages}
         onDone={(id) => setFlyingMessages(prev => prev.filter(m => m.id !== id))}
       />
-      <div className="min-h-[100dvh] bg-neutral-950 flex justify-center">
-        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100dvh] relative flex flex-col">
+      <div className="min-h-screen bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-screen relative flex flex-col">
         {view === 'MAIN' ? (
           <MainScreen
             ownProfile={ownProfile}

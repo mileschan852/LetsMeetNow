@@ -29,6 +29,8 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Debug: if React crashes, this stays visible -->
+    <div id="debug-fallback" style="position:fixed;bottom:0;left:0;right:0;background:#000;color:#FF6B35;font-family:monospace;font-size:10px;padding:4px;z-index:99999">Booting...</div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

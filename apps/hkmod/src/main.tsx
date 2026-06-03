@@ -8,3 +8,7 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Remove debug fallback — if this runs, React mounted successfully
+const fallback = document.getElementById('debug-fallback')
+if (fallback) fallback.remove()
