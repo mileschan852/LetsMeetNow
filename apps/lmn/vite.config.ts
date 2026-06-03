@@ -15,6 +15,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    assetsInlineLimit: 0, // Don't inline any assets - always emit as files
   },
   server: {
     port: 3001,

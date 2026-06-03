@@ -2174,6 +2174,14 @@ export default function App() {
         {photoOverlay && (
           <PhotoOverlay user={photoOverlay} onClose={() => setPhotoOverlay(null)} onMessage={handleMessage} lang={lang} />
         )}
+        {/* Debug overlay - always visible to help diagnose black screen */}
+        <div className="fixed bottom-20 left-0 right-0 z-[60] pointer-events-none">
+          <div className="mx-auto max-w-[min(520px,100vw)] px-3">
+            <div className="bg-black/80 text-[#FF6B35] text-[9px] font-mono p-2 rounded-lg inline-block">
+              g:{groupCheck} l:{locationGranted ? '1' : '0'} v:{view} u:{users.length} load:{isLoadingUsers ? '1' : '0'} adm:{isAdmin ? '1' : '0'} tg:{!!getTg() ? '1' : '0'}
+            </div>
+          </div>
+        </div>
         {/* Admin popup — Release own lock only */}
         {adminAction === 'release' && (
           <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-black/70 flex items-center justify-center" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }} onClick={() => setAdminAction(null)}>

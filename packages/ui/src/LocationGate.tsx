@@ -37,7 +37,7 @@ export function LocationGate({ onGranted, lang }: { onGranted: (lat: number, lng
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-black text-white p-6">
+    <div className="flex flex-col items-center justify-center h-full min-h-0 bg-black text-white p-6">
       <div className="w-20 h-20 rounded-full bg-[#1C1C1E] flex items-center justify-center mb-4">
         <MapPin className="w-10 h-10 text-[#FF6B35]" />
       </div>
