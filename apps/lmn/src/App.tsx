@@ -730,7 +730,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   // const onlineCount = users.filter(u => u.id !== ownProfile.id && u.tgUsername !== '_test_' && isRecentlyActive(u)).length + 1 // +1 for self, exclude test users
 
   return (
-    <div className="pb-20">
+    <div className="flex-1 overflow-y-auto min-h-0 pb-20">
       <div className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
         {/* LEFT: Logo + LMN + Raffle + Dot Matrix Timer */}
         <div className="flex items-center gap-2">
@@ -1009,32 +1009,9 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
   const [saved, setSaved] = useState(false)
   const [photoIndex, setPhotoIndex] = useState(0)
   const [photoLoaded, setPhotoLoaded] = useState(false)
-  const [lastSavedAt, setLastSavedAt] = useState(0)
-  const [globalUnlockAt, setGlobalUnlockAt] = useState(0)
-
-  // Load last saved timestamp from storage + global unlock
-  useEffect(() => {
-    storageGetAll().then(result => {
-      // Migrate old month key to timestamp
-      const oldMonth = result?.[CLOUD.prefChangedAt]
-      const newTs = result?.[CLOUD.prefLockedAt]
-      if (newTs) {
-        setLastSavedAt(parseInt(newTs) || 0)
-      } else if (oldMonth && oldMonth.length >= 7) {
-        // Convert "2026-05" → timestamp of 1st of that month
-        const ts = new Date(`${oldMonth}-01T00:00:00Z`).getTime()
-        setLastSavedAt(ts)
-        // Also save in new format
-        storageSet(CLOUD.prefLockedAt, String(ts))
-      }
-    })
-    // Fetch global unlock timestamp from Supabase
-    fetchGlobalUnlock().then(ts => setGlobalUnlockAt(ts))
-  }, [])
 
   useEffect(() => { setDraft({ ...profile }) }, [profile.id])
 
-  // Reset photo state when photo URL changes
   useEffect(() => {
     setPhotoLoaded(false)
     setPhotoIndex(0)
@@ -1045,84 +1022,15 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
     setSaved(false)
   }
 
-  const togglePref = (field: 'preference1' | 'preference2' | 'preference3' | 'preference4', a: string, b: string, c?: string) => {
-    // If edit profile unlocked via ⭐ button, skip all locks
-    if (editProfileUnlocked) {
-      if (c) {
-        const current = draft[field]
-        if (current === a) updateDraft(field, b)
-        else if (current === b) updateDraft(field, c)
-        else updateDraft(field, a)
-      } else {
-        updateDraft(field, draft[field] === a ? b : a)
-      }
-      return
-    }
-    // preference4 is always unlocked (two-state: Host <-> Travel, no monthly lock)
-    if (field !== 'preference4') {
-      // preference2: unlocked = free 3-state cycle; locked = Party↔Party✓ only
-      if (field === 'preference2') {
-        const current = draft.preference2
-        const locked = isPrefLocked(lastSavedAt, globalUnlockAt)
-        const isParty = (current === 'Party' || current === 'Party✓')
-
-        if (locked && !isParty) {
-          // Already Clean while locked — shouldn't happen, but block
-          alert(`${lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? 'Нельзя менять 30 дней' : 'Can only change every 30 days'}`)
-          return
-        }
-
-        if (locked && isParty) {
-          // Locked + Party/Party✓ → only toggle between Party↔Party✓
-          updateDraft('preference2', current === 'Party' ? 'Party✓' : 'Party')
-          return
-        }
-
-        // Unlocked — full 3-state cycle Clean → Party → Party✓ → Clean
-        if (current === 'Clean') updateDraft('preference2', 'Party')
-        else if (current === 'Party') updateDraft('preference2', 'Party✓')
-        else updateDraft('preference2', 'Clean')
-        return
-      }
-      // Check 30-day lock for preference1, preference3, role, stats
-      if (isPrefLocked(lastSavedAt, globalUnlockAt)) {
-        const labels: Record<string, string> = { preference1: 'Safe/Raw', preference3: '1on1/Group' }
-        alert(`${labels[field]}: ${lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? 'Нельзя менять 30 дней' : 'Can only change every 30 days'}`)
-        return
-      }
-    }
-    if (c) {
-      // Three-state cycle: a -> b -> c -> a
-      const current = draft[field]
-      if (current === a) updateDraft(field, b)
-      else if (current === b) updateDraft(field, c)
-      else updateDraft(field, a)
-    } else {
-      updateDraft(field, draft[field] === a ? b : a)
-    }
-  }
-
-  const cyclePref4 = () => {
-    const order: Array<'Host' | 'Travel' | 'Outdoor' | 'Sauna'> = ['Host', 'Travel', 'Outdoor', 'Sauna']
-    const current = draft.preference4 || 'Travel'
-    const idx = order.indexOf(current)
-    updateDraft('preference4', order[(idx + 1) % order.length])
-  }
-
   const handleSave = async () => {
-    // Validation: required fields must be filled
     if (!draft.height || draft.height <= 0 || !draft.weight || draft.weight <= 0) {
-      alert(lang === 'tc' ? '請輸入身高和體重' : lang === 'sc' ? '请输入身高和体重' : lang === 'ru' ? 'Введите рост и вес' : 'Please enter height and weight')
+      alert('Please enter height and weight')
       return
     }
     if (!draft.dob) {
       alert('Please enter date of birth')
       return
     }
-
-    const now = Date.now()
-    await storageSet(CLOUD.prefLockedAt, String(now))
-    setLastSavedAt(now)
     await storageSet(CLOUD.height, String(draft.height))
     await storageSet(CLOUD.weight, String(draft.weight))
     await storageSet(CLOUD.pref1, draft.gender || 'Male')
@@ -1141,7 +1049,6 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
 
   return (
     <div className="view-enter h-full flex flex-col">
-      {/* Fixed Header */}
       <div className="shrink-0 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2.5 flex items-center justify-between z-10">
         <button onClick={onBack} className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center nav-press">
           <ArrowLeft className="w-4 h-4 text-white" />
@@ -1150,32 +1057,22 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         <div className="w-8" />
       </div>
 
-      {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto px-3 pt-3 pb-4">
-
-        {/* Photo + Stats Row */}
+        {/* Photo + Name */}
         <div className="flex gap-3 mb-3">
           <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A]">
-            {/* Placeholder always visible underneath */}
             <div className="absolute inset-0 flex items-center justify-center z-0">
               <span className="text-2xl font-bold text-[#8E8E93]">{draft.name.charAt(0)}</span>
             </div>
-            {/* Image layered on top — click to rotate */}
             {currentPhoto && (
               <img
-                src={currentPhoto}
-                alt="You"
+                src={currentPhoto} alt="You"
                 className={`absolute inset-0 w-full h-full object-cover z-10 ${photoLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300 active:opacity-70`}
-                referrerPolicy="no-referrer"
-                draggable={false}
-                loading="eager"
-                decoding="async"
-                onLoad={() => setPhotoLoaded(true)}
-                onError={() => setPhotoLoaded(false)}
+                referrerPolicy="no-referrer" draggable={false} loading="eager" decoding="async"
+                onLoad={() => setPhotoLoaded(true)} onError={() => setPhotoLoaded(false)}
                 onClick={() => hasMultiplePhotos && setPhotoIndex((prev) => (prev + 1) % photos.length)}
               />
             )}
-            {/* Photo counter badge */}
             {hasMultiplePhotos && (
               <div className="absolute top-0.5 right-0.5 bg-black/60 rounded-full px-1 py-0 z-20">
                 <span className="text-white text-[8px] font-bold">{photoIndex + 1}/{photos.length}</span>
@@ -1185,43 +1082,65 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
               <span className="text-white text-[7px] font-bold uppercase">TG</span>
             </div>
           </div>
-
           <div className="flex-1 flex flex-col justify-center gap-1">
-            <div className="flex items-center gap-2">
-              <span className="text-white font-bold text-base">{draft.name}</span>
-              {draft.isOnline && <span className="px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[9px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
-            </div>
+            <span className="text-white font-bold text-base">{draft.name}</span>
             <div className="flex items-center gap-2 text-xs text-[#8E8E93]">
-              <span>{draft.height}cm</span><span className="text-[#2C2C2E]">|</span>
-              <span>{draft.weight}kg</span><span className="text-[#2C2C2E]">|</span>
-              <span className="text-[#FF6B35] font-bold">{formatRole(draft.position, draft.isSide)}</span>
+              <span>{draft.height}cm</span><span className="text-[#2C2C2E]">|</span><span>{draft.weight}kg</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => togglePref('preference1', 'Safe', 'Raw')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference1 === 'Safe' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? '🔒' : ''}{tPref(lang, draft.preference1 || 'Safe')}</button>
-              <button onClick={() => togglePref('preference2', 'Clean', 'Party', 'Party✓')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference2 === 'Clean' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? 'opacity-40 pointer-events-none' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? '🔒' : ''}{tPref(lang, draft.preference2 || 'Clean')}</button>
-              <button onClick={() => togglePref('preference3', '1on1', 'Group')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference3 === '1on1' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? '🔒' : ''}{tPref(lang, draft.preference3 || '1on1')}</button>
-              <button onClick={cyclePref4} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference4 === 'Host' ? 'bg-indigo-500/20 text-indigo-400' : draft.preference4 === 'Travel' ? 'bg-cyan-500/20 text-cyan-400' : draft.preference4 === 'Outdoor' ? 'bg-lime-500/20 text-lime-400' : 'bg-amber-500/20 text-amber-400'}`}>{tPref(lang, draft.preference4 || 'Travel')}</button>
-            </div>
+            {draft.dob && (
+              <span className="text-purple-400 text-xs font-bold">
+                {getZodiacEmoji(getZodiac(draft.dob))} {getZodiac(draft.dob)} · {new Date().getFullYear() - new Date(draft.dob).getFullYear()}yo
+              </span>
+            )}
           </div>
         </div>
 
         <div className="h-px bg-[#2C2C2E] mb-3" />
 
-        {/* Height & Weight — same row, monthly locked */}
+        {/* Gender */}
         <div className="mb-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')} / {t(lang, 'weight')}</span>
-            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
+          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Gender</span>
+          <div className="flex gap-2">
+            <button onClick={() => updateDraft('gender', 'Male')} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.gender === 'Male' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>Male</button>
+            <button onClick={() => updateDraft('gender', 'Female')} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.gender === 'Female' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>Female</button>
           </div>
-          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+        </div>
+
+        {/* Seeking Gender */}
+        <div className="mb-3">
+          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Seeking</span>
+          <div className="flex gap-2">
+            {(['Men','Women','Both'] as const).map(g => (
+              <button key={g} onClick={() => updateDraft('seekingGender', g)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.seekingGender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Date of Birth */}
+        <div className="mb-3">
+          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Date of Birth</span>
+          <input
+            type="date"
+            value={draft.dob || ''}
+            onChange={(e) => updateDraft('dob', e.target.value)}
+            className="w-full h-10 px-3 bg-[#1A1A1A] rounded-lg text-white text-sm outline-none border border-[#2C2C2E] focus:border-[#FF6B35]/50"
+          />
+        </div>
+
+        {/* Height & Weight */}
+        <div className="mb-3">
+          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Height / Weight</span>
+          <div className="flex gap-2">
             <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
-              <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')}</span>
+              <span className="text-xs text-[#8E8E93] font-medium uppercase">Height</span>
               <input type="number" value={draft.height || ''} placeholder="0"
                 onChange={(e) => updateDraft('height', parseInt(e.target.value) || 0)}
                 className="bg-transparent text-white text-sm font-medium text-right outline-none w-16" />
             </div>
             <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
-              <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'weight')}</span>
+              <span className="text-xs text-[#8E8E93] font-medium uppercase">Weight</span>
               <input type="number" value={draft.weight || ''} placeholder="0"
                 onChange={(e) => updateDraft('weight', parseInt(e.target.value) || 0)}
                 className="bg-transparent text-white text-sm font-medium text-right outline-none w-16" />
@@ -1229,64 +1148,50 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
           </div>
         </div>
 
-        <div className="h-px bg-[#2C2C2E] mb-3" />
-
-        {/* Role Section */}
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'role') || 'Role'}</span>
-            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
+        {/* Seeking Today */}
+        <div className="mb-3">
+          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Seeking Today</span>
+          <div className="flex gap-2 flex-wrap">
+            {(['Just Browsing','Meet Now','Date Tonight','Open to Chat'] as const).map(s => (
+              <button key={s} onClick={() => updateDraft('seekingToday', s)} className={`h-9 px-3 rounded-lg text-xs font-bold transition-all nav-press ${draft.seekingToday === s ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+                {s}
+              </button>
+            ))}
           </div>
-          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
-            <button onClick={() => updateDraft('isSide', false)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${!draft.isSide ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-              {formatRole(draft.position, false)}
-            </button>
-            <button onClick={() => updateDraft('isSide', true)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${draft.isSide ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-              Side
-            </button>
-          </div>
+        </div>
 
-          {!draft.isSide && (
-            <div className={`space-y-1 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
-              <div className="flex items-center justify-between text-[10px] text-[#8E8E93]">
-                <span>{t(lang, 'bottom0')}</span>
-                <span className="text-white font-bold text-xs">{draft.position.toFixed(1)}</span>
-                <span>{t(lang, 'top1')}</span>
-              </div>
-              <input type="range" min="0" max="1" step="0.1" value={draft.position}
-                onChange={(e) => updateDraft('position', parseFloat(e.target.value))}
-                className="w-full h-2 bg-[#2C2C2E] rounded-full appearance-none cursor-pointer"
-                style={{ accentColor: '#FF6B35' }} />
-              <div className="flex justify-between px-1">
-                {[0, 0.2, 0.4, 0.6, 0.8, 1].map(v => (
-                  <span key={v} className={`text-[8px] ${Math.abs(draft.position - v) < 0.05 ? 'text-[#FF6B35] font-bold' : 'text-[#8E8E93]'}`}>{v.toFixed(1)}</span>
-                ))}
-              </div>
-            </div>
-          )}
+        {/* Meetup Type */}
+        <div className="mb-3">
+          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Meetup Type</span>
+          <div className="flex gap-2 flex-wrap">
+            {(['Not Set','Coffee','Drinks','Dinner','Walk','Event'] as const).map(m => (
+              <button key={m} onClick={() => updateDraft('meetupType', m)} className={`h-9 px-3 rounded-lg text-xs font-bold transition-all nav-press ${draft.meetupType === m ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Open to Messages */}
+        <div className="mb-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={!!draft.openToMessages}
+              onChange={(e) => updateDraft('openToMessages', e.target.checked)}
+              className="w-4 h-4 accent-[#FF6B35]"
+            />
+            <span className="text-sm text-white">⭐ Open to Messages</span>
+          </label>
         </div>
       </div>
 
-      {/* ─── FIXED SAVE BAR at bottom ─── */}
+      {/* Save Bar */}
       <div className="shrink-0 bg-[#0A0A0A]/95 backdrop-blur-xl border-t border-[#2C2C2E] px-3 pt-3 pb-5 z-20">
         {saved && (
-          <div className="text-center text-[#00D4AA] text-xs font-semibold mb-2 animate-pulse">
-            {t(lang, 'saved')}
-          </div>
+          <div className="text-center text-[#00D4AA] text-xs font-semibold mb-2 animate-pulse">Saved!</div>
         )}
-        {/* Only show Save when there are changes */}
-        {(draft.height !== profile.height || draft.weight !== profile.weight ||
-          draft.position !== profile.position || draft.isSide !== profile.isSide ||
-          draft.preference1 !== profile.preference1 || draft.preference2 !== profile.preference2 ||
-          draft.preference3 !== profile.preference3 || draft.preference4 !== profile.preference4) ? (
-          <button onClick={handleSave} className="w-full h-14 gradient-btn rounded-xl text-white font-bold text-lg nav-press flex items-center justify-center gap-2">
-            <Check className="w-6 h-6" />{t(lang, 'saveProfile')}
-          </button>
-        ) : (
-          <button onClick={onBack} className="w-full h-12 bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl text-[#8E8E93] font-medium text-sm nav-press">
-            Back
-          </button>
-        )}
+        <button onClick={handleSave} className="w-full h-14 gradient-btn rounded-xl text-white font-bold text-lg nav-press flex items-center justify-center gap-2">
+          <Check className="w-6 h-6" />Save Profile
+        </button>
       </div>
     </div>
   )

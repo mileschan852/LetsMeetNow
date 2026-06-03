@@ -680,7 +680,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   // const onlineCount = users.filter(u => u.id !== ownProfile.id && u.tgUsername !== '_test_' && isRecentlyActive(u)).length + 1 // +1 for self, exclude test users
 
   return (
-    <div className="pb-20">
+    <div className="flex-1 overflow-y-auto min-h-0 pb-20">
       <div className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
         {/* LEFT: Logo + HKMOD + Raffle + Dot Matrix Timer */}
         <div className="flex items-center gap-2">
