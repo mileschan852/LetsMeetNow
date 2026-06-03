@@ -7,52 +7,15 @@ on:
       - 'packages/core/**'
       - 'packages/ui/**'
       - '.github/workflows/deploy-hkmod.yml'
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  workflow_dispatch:
 jobs:
-  build:
+  trigger-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Trigger HKMO_D_Bot deployment
+        uses: peter-evans/repository-dispatch@v3
         with:
-          node-version: '22'
-      - name: Install UI package dependencies
-        run: |
-          cd packages/ui
-          npm ci
-      - name: Install HKMOD dependencies
-        run: |
-          cd apps/hkmod
-          npm ci
-      - name: Build HKMOD
-        run: |
-          cd apps/hkmod
-          npm run build
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-        with:
-          enablement: true
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './apps/hkmod/dist'
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          token: ${{ secrets.GH_PAT }}
+          repository: mileschan852/HKMO_D_Bot
+          event-type: deploy-hkmod
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
