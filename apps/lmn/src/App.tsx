@@ -348,7 +348,7 @@ function getZodiacEmoji(sign: string): string {
 
 // ─── Photo Overlay ────────────────────────────────────────────────────
 
-function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; onClose: () => void; onMessage: (u: UserProfile) => void; lang: Lang }) {
+function PhotoOverlay({ user, onClose, onMessage, lang, ownProfile }: { user: UserProfile; onClose: () => void; onMessage: (u: UserProfile) => void; lang: Lang; ownProfile: UserProfile }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const photos = user.tgPhotos?.length ? user.tgPhotos : (user.tgPhotoUrl ? [user.tgPhotoUrl] : [])
@@ -411,7 +411,7 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
               {isUserActive(user) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
             </div>
           </div>
-          {!user.isOwn && (
+          {!user.isOwn && ownProfile.seekingToday !== 'Just Browsing' && user.seekingToday !== 'Just Browsing' && (
             <button onClick={() => onMessage(user)} className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
               <MessageCircle className="w-4 h-4" />
               {user.openToMessages ? '⭐ ' + t(lang, 'message') : t(lang, 'message')}
@@ -1046,8 +1046,9 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
     if (draft.seekingToday !== profile.seekingToday) changes.push('Seeking Today: ' + draft.seekingToday)
 
     const hasPermanent = changes.some(c => !c.startsWith('Seeking Today:'))
+    const justBrowsingWarning = draft.seekingToday === 'Just Browsing' ? '\n\n⚠️ Just Browsing: You will NOT be able to send or receive messages while in this status.' : ''
     if (changes.length > 0) {
-      const msg = changes.join('\\n') + '\\n\\n' + (hasPermanent ? '⚠️ Personal info is PERMANENT and cannot be changed later.\\n\\n' : '') + 'Save these changes?'
+      const msg = changes.join('\\n') + '\\n\\n' + (hasPermanent ? '⚠️ Personal info is PERMANENT and cannot be changed later.\\n\\n' : '') + justBrowsingWarning + 'Save these changes?'
       if (!window.confirm(msg)) return
     } else {
       onBack()
@@ -1882,6 +1883,12 @@ export default function App() {
       lng,
       is_online: true,
       updated_at: new Date().toISOString(),
+      // LMN fields
+      dob: ownProfile.dob || null,
+      gender: ownProfile.gender || 'Male',
+      seeking_gender: ownProfile.seekingGender || 'Women',
+      seeking_today: ownProfile.seekingToday || 'Just Browsing',
+      hide_age: ownProfile.hideAge || false,
     }).then(result => {
       console.log('Upsert result:', result ? `success id=${result.id}` : 'null')
       // Auto 7-day filter unlock for new users
@@ -1893,7 +1900,7 @@ export default function App() {
     }).catch(err => {
       console.error('Upsert error:', String(err).substring(0, 200))
     })
-  }, [ownProfile.lat, ownProfile.lng, ownProfile.name, ownProfile.tgPhotoUrl, ownProfile.height, ownProfile.weight, ownProfile.position, ownProfile.isSide, ownProfile.preference1, ownProfile.preference2, ownProfile.preference3, ownProfile.preference4, ownProfile.openToMessages, ownProfile.tgUsername])
+  }, [ownProfile.lat, ownProfile.lng, ownProfile.name, ownProfile.tgPhotoUrl, ownProfile.height, ownProfile.weight, ownProfile.position, ownProfile.isSide, ownProfile.preference1, ownProfile.preference2, ownProfile.preference3, ownProfile.preference4, ownProfile.openToMessages, ownProfile.tgUsername, ownProfile.dob, ownProfile.gender, ownProfile.seekingGender, ownProfile.seekingToday, ownProfile.hideAge])
 
   // ─── Heartbeat: update timestamp every 30s ────────────────────────
   useEffect(() => {
@@ -1991,6 +1998,16 @@ export default function App() {
   // ─── Message handler ──────────────────────────────────────────────
   // ─── Message handler with stars gate ──────────────────────────────
   const handleMessage = useCallback((user: UserProfile) => {
+    // Just Browsing gate: neither user can send/receive
+    if (ownProfile.seekingToday === 'Just Browsing') {
+      alert('You are in Just Browsing mode. Change your status to send messages.')
+      return
+    }
+    if (user.seekingToday === 'Just Browsing') {
+      alert('This user is in Just Browsing mode and not accepting messages.')
+      return
+    }
+
     // Profile picture gate: target has real photo, current user doesn't
     if (user.hasRealPhoto && ownProfile.hasRealPhoto !== true) {
       const tg = getTg()
@@ -2042,7 +2059,7 @@ export default function App() {
     if (tg?.openTelegramLink) { tg.openTelegramLink(tgUrl); return }
     if (tg?.openLink) { tg.openLink(tgUrl, { try_instant_view: false }); return }
     window.open(tgUrl, '_blank')
-  }, [starsPaidFor, ownProfile.hasRealPhoto, lang])
+  }, [starsPaidFor, ownProfile.hasRealPhoto, lang, ownProfile.seekingToday])
 
   // ─── Render ───────────────────────────────────────────────────────
   // Splash screen
@@ -2222,7 +2239,7 @@ export default function App() {
           />
         )}
         {photoOverlay && (
-          <PhotoOverlay user={photoOverlay} onClose={() => setPhotoOverlay(null)} onMessage={handleMessage} lang={lang} />
+          <PhotoOverlay user={photoOverlay} onClose={() => setPhotoOverlay(null)} onMessage={handleMessage} lang={lang} ownProfile={ownProfile} />
         )}
         {/* Admin popup — Release own lock only */}
         {adminAction === 'release' && (

@@ -33,6 +33,7 @@ export interface DbUser {
   seeking_gender: string | null
   seeking_today: string | null
   meetup_type: string | null
+  hide_age: boolean | null
   
   // HKMOD fields (for compatibility)
   position: number
