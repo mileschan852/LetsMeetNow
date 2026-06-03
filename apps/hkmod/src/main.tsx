@@ -5,7 +5,7 @@ import App from './App.tsx'
 
 const fallback = document.getElementById('debug-fallback')
 
-window.onerror = function(msg, url, line, col, err) {
+window.onerror = function(msg, _url, line, col, _err) {
   if (fallback) {
     fallback.style.background = '#FF0000'
     fallback.style.color = '#FFF'
