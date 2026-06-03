@@ -58,7 +58,7 @@ interface UserProfile {
   dob?: string | null
   seekingToday?: string
   meetupType?: string | null
-  hideAgeUntil?: string | null
+  hideAge?: boolean
 }
 
 type View = 'MAIN' | 'OWN_PROFILE'
@@ -142,6 +142,9 @@ const CLOUD = {
   gridRowsUnlockedAt: 'lmn_grid_rows_unlocked_at',
   invisibleActive: 'lmn_invisible_active',
   channelFollowed: 'lmn_channel_followed',
+  hideAge: 'lmn_hide_age',
+  seekingTodayChangedAt: 'lmn_seek_today_at',
+  dob: 'lmn_dob',
 }
 
 // Telegram CloudStorage
@@ -310,7 +313,7 @@ function dbToProfile(u: any, myLat: number, myLng: number): UserProfile {
     dob: u.dob ? u.dob : undefined,
     seekingToday: u.seeking_today || 'Just Browsing',
     meetupType: u.meetup_type ? u.meetup_type : undefined,
-    hideAgeUntil: u.hide_age_until ?? null,
+    hideAge: !!u.hide_age,
   }
 }
 
@@ -1031,13 +1034,45 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
       alert('Please enter date of birth')
       return
     }
+
+    // Build confirmation message
+    const changes: string[] = []
+    if (draft.gender !== profile.gender) changes.push('Gender: ' + draft.gender)
+    if (draft.seekingGender !== profile.seekingGender) changes.push('Seeking: ' + draft.seekingGender)
+    if (draft.dob !== profile.dob) changes.push('Date of Birth: ' + draft.dob)
+    if (draft.height !== profile.height) changes.push('Height: ' + draft.height + 'cm')
+    if (draft.weight !== profile.weight) changes.push('Weight: ' + draft.weight + 'kg')
+    if (draft.hideAge !== profile.hideAge) changes.push('Hide Age: ' + (draft.hideAge ? 'On' : 'Off'))
+    if (draft.seekingToday !== profile.seekingToday) changes.push('Seeking Today: ' + draft.seekingToday)
+
+    const hasPermanent = changes.some(c => !c.startsWith('Seeking Today:'))
+    if (changes.length > 0) {
+      const msg = changes.join('\\n') + '\\n\\n' + (hasPermanent ? '⚠️ Personal info is PERMANENT and cannot be changed later.\\n\\n' : '') + 'Save these changes?'
+      if (!window.confirm(msg)) return
+    } else {
+      onBack()
+      return
+    }
+
+    // 12-hour cooldown for seekingToday
+    if (draft.seekingToday !== profile.seekingToday) {
+      const lastStr = await storageGet(CLOUD.seekingTodayChangedAt)
+      const lastTs = lastStr ? parseInt(lastStr) : 0
+      const hoursSince = (Date.now() - lastTs) / (1000 * 60 * 60)
+      if (lastTs > 0 && hoursSince < 12) {
+        const minsLeft = Math.ceil((12 * 60 * 60 * 1000 - (Date.now() - lastTs)) / (1000 * 60))
+        alert('Seeking Today can only be changed every 12 hours. ' + Math.floor(minsLeft / 60) + 'h ' + (minsLeft % 60) + 'm remaining.')
+        return
+      }
+      await storageSet(CLOUD.seekingTodayChangedAt, String(Date.now()))
+    }
+
     await storageSet(CLOUD.height, String(draft.height))
     await storageSet(CLOUD.weight, String(draft.weight))
     await storageSet(CLOUD.pref1, draft.gender || 'Male')
     await storageSet(CLOUD.pref2, draft.seekingGender || 'Women')
     await storageSet(CLOUD.pref3, draft.seekingToday || 'Just Browsing')
-    await storageSet(CLOUD.pref4, draft.meetupType || 'Not Set')
-    await storageSet(CLOUD.openMsg, String(draft.openToMessages || false))
+    await storageSet(CLOUD.hideAge, String(!!draft.hideAge))
     onSave(draft)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -1118,7 +1153,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
           </div>
         </div>
 
-        {/* Date of Birth */}
+        {/* Date of Birth + Hide Age */}
         <div className="mb-3">
           <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Date of Birth</span>
           <input
@@ -1127,6 +1162,13 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
             onChange={(e) => updateDraft('dob', e.target.value)}
             className="w-full h-10 px-3 bg-[#1A1A1A] rounded-lg text-white text-sm outline-none border border-[#2C2C2E] focus:border-[#FF6B35]/50"
           />
+          <label className="flex items-center gap-2 cursor-pointer mt-2">
+            <input type="checkbox" checked={!!draft.hideAge}
+              onChange={(e) => updateDraft('hideAge', e.target.checked)}
+              className="w-4 h-4 accent-[#FF6B35]"
+            />
+            <span className="text-sm text-white">🙈 Hide my age on profile</span>
+          </label>
         </div>
 
         {/* Height & Weight */}
@@ -1148,39 +1190,19 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
           </div>
         </div>
 
-        {/* Seeking Today */}
+        {/* Seeking Today — dropdown, 12h cooldown */}
         <div className="mb-3">
           <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Seeking Today</span>
-          <div className="flex gap-2 flex-wrap">
-            {(['Just Browsing','Meet Now','Date Tonight','Open to Chat'] as const).map(s => (
-              <button key={s} onClick={() => updateDraft('seekingToday', s)} className={`h-9 px-3 rounded-lg text-xs font-bold transition-all nav-press ${draft.seekingToday === s ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-                {s}
-              </button>
+          <select
+            value={draft.seekingToday || 'Just Browsing'}
+            onChange={(e) => updateDraft('seekingToday', e.target.value)}
+            className="w-full h-10 px-3 bg-[#1A1A1A] rounded-lg text-white text-sm outline-none border border-[#2C2C2E] focus:border-[#FF6B35]/50 appearance-none"
+          >
+            {['Just Browsing', 'Chat Only', 'Video Call', 'Meet Up'].map(s => (
+              <option key={s} value={s}>{s}</option>
             ))}
-          </div>
-        </div>
-
-        {/* Meetup Type */}
-        <div className="mb-3">
-          <span className="text-xs text-[#8E8E93] font-medium uppercase block mb-1.5">Meetup Type</span>
-          <div className="flex gap-2 flex-wrap">
-            {(['Not Set','Coffee','Drinks','Dinner','Walk','Event'] as const).map(m => (
-              <button key={m} onClick={() => updateDraft('meetupType', m)} className={`h-9 px-3 rounded-lg text-xs font-bold transition-all nav-press ${draft.meetupType === m ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Open to Messages */}
-        <div className="mb-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={!!draft.openToMessages}
-              onChange={(e) => updateDraft('openToMessages', e.target.checked)}
-              className="w-4 h-4 accent-[#FF6B35]"
-            />
-            <span className="text-sm text-white">⭐ Open to Messages</span>
-          </label>
+          </select>
+          <p className="text-[10px] text-[#8E8E93] mt-1">Can only be changed every 12 hours</p>
         </div>
       </div>
 
@@ -1324,6 +1346,8 @@ export default function App() {
     openToMessages: false, tgUsername: '', tgPhotoUrl: '', tgPhotos: [],
     hasPhoto: false, hasRealPhoto: undefined,
     isInvisible: false,
+    // LMN defaults
+    gender: 'Male', seekingGender: 'Women', seekingToday: 'Just Browsing', hideAge: false,
   })
   const [users, setUsers] = useState<UserProfile[]>([])
   const [photoOverlay, setPhotoOverlay] = useState<UserProfile | null>(null)
@@ -1715,6 +1739,12 @@ export default function App() {
         loaded.preference4 = (p4 === 'Off' ? 'Travel' : p4) as 'Host' | 'Travel' | 'Outdoor' | 'Sauna'
       }
       loaded.openToMessages = result[CLOUD.openMsg] === 'true'
+      // LMN fields
+      if (result[CLOUD.pref1]) loaded.gender = result[CLOUD.pref1]
+      if (result[CLOUD.pref2]) loaded.seekingGender = result[CLOUD.pref2]
+      if (result[CLOUD.pref3]) loaded.seekingToday = result[CLOUD.pref3]
+      if (result[CLOUD.dob]) loaded.dob = result[CLOUD.dob]
+      loaded.hideAge = result[CLOUD.hideAge] === 'true'
       if (result[CLOUD.lang]) setLang(result[CLOUD.lang] as Lang)
 
       // Check if grid filters are unlocked (from gift/deep link), with 30-day expiry
