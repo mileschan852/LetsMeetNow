@@ -7,6 +7,12 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>HKMOD - Hong Kong Members Only Dating</title>
+    <script>
+      // Aggressive cache-busting: force reload with timestamp on first load
+      if (!location.search.includes('_cb=')) {
+        location.replace(location.href + (location.search ? '&' : '?') + '_cb=' + Date.now())
+      }
+    </script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
       // Block Kimi Agent widget injection
