@@ -615,7 +615,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
           {user.isOwn ? 'You' : user.name}
         </p>
         <div className="flex items-center justify-between">
-          <p className="text-[#FF6B35] text-[7px] font-medium">{formatDist(user.distance)}</p>
+          <p className="text-[#FF6B35] text-[7px] font-medium">{user.age} • {formatDist(user.distance)}</p>
           {!user.isOwn && <p className="text-[#8E8E93] text-[6px]">{getTimeAgo(user.updatedAt)}</p>}
           <p className={`text-[6px] font-bold ${user.gender === 'Male' ? 'text-blue-400' : 'text-pink-400'}`}>{genderLabel}</p>
         </div>
@@ -2166,9 +2166,7 @@ export default function App() {
     )
   }
 
-  // Debug bar for admin
-  const showDebugBar = isAdmin
-  const debugInfo = `LMN DEBUG: l:${locationGranted ? '1' : '0'} v:${view} u:${users.length} load:${isLoadingUsers ? '1' : '0'} adm:${isAdmin ? '1' : '0'} tg:${!!getTg() ? '1' : '0'}`
+  // Debug overlay removed — now inline in JSX below
 
   if (groupCheck === 'checking') {
     return (
@@ -2367,14 +2365,14 @@ export default function App() {
         )}
       </div>
     </div>
-    {/* Admin debug bar */}
-    {showDebugBar && (
-      <div className="fixed bottom-0 left-0 right-0 z-[60] flex justify-center pointer-events-none">
-        <div className="bg-[#FF6B35] text-black text-[11px] font-mono font-bold p-2 rounded-t-lg inline-block shadow-lg">
-          {debugInfo}
+    {/* Debug overlay — always visible at TOP to help diagnose black screen */}
+    <div className="fixed top-0 left-0 right-0 z-[70] pointer-events-none">
+      <div className="mx-auto max-w-[min(520px,100vw)] px-2">
+        <div className="bg-[#FF6B35] text-black text-[11px] font-mono font-bold p-2 rounded-b-lg inline-block shadow-lg">
+          LMN DEBUG: l:{locationGranted ? '1' : '0'} v:{view} u:{users.length} load:{isLoadingUsers ? '1' : '0'} adm:{isAdmin ? '1' : '0'} tg:{!!getTg() ? '1' : '0'}
         </div>
       </div>
-    )}
+    </div>
   </>
   )
 }
