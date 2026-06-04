@@ -263,10 +263,10 @@ function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
     distance: Math.round(dist),
     lat: u.lat,
     lng: u.lng,
-    preference1: u.preference1 as 'Safe' | 'Raw',
-    preference2: u.preference2 as 'Clean' | 'Party' | 'Party✓',
-    preference3: u.preference3 as '1on1' | 'Group',
-    preference4: (u.preference4 === 'Off' ? 'Travel' : u.preference4 as 'Host' | 'Travel' | 'Outdoor' | 'Sauna') || undefined,
+    preference1: (u.preference1 as 'Safe' | 'Raw') || 'Raw',
+    preference2: (u.preference2 as 'Clean' | 'Party' | 'Party✓') || 'Party',
+    preference3: (u.preference3 as '1on1' | 'Group') || 'Group',
+    preference4: (u.preference4 === 'Off' ? 'Travel' : u.preference4 as 'Host' | 'Travel' | 'Outdoor' | 'Sauna') || 'Travel',
     openToMessages: u.open_to_messages || false,
     tgUsername: u.tg_username || undefined,
     tgPhotoUrl: u.photo_url?.startsWith('http') ? u.photo_url : undefined,
@@ -306,13 +306,14 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
           <>
             <div ref={scrollRef} onScroll={handleScroll} className="w-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
               {photos.map((photo, i) => (
-                <div key={i} className="w-full flex-shrink-0 snap-center flex items-center justify-center">
+                <div key={i} className="w-full h-full flex-shrink-0 snap-center flex items-center justify-center">
                   <img
                     src={photo}
                     alt={`${user.name} ${i + 1}`}
                     className="max-w-full max-h-[65vh] object-contain"
                     draggable={false}
                     referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 </div>
               ))}
@@ -465,7 +466,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
         <img
           src={photo}
           alt={user.name}
-          className={`absolute inset-0 w-full h-full object-cover ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute inset-0 w-full h-full object-cover z-10 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           style={{ transition: 'opacity 0.3s' }}
           onLoad={() => setImgLoaded(true)}
           onError={() => setImgFailed(true)}
@@ -1189,6 +1190,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
               <button onClick={() => togglePref('preference2', 'Clean', 'Party', 'Party✓')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference2 === 'Clean' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? 'opacity-40 pointer-events-none' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? '🔒' : ''}{tPref(lang, draft.preference2 || 'Clean')}</button>
               <button onClick={() => togglePref('preference3', '1on1', 'Group')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference3 === '1on1' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? '🔒' : ''}{tPref(lang, draft.preference3 || '1on1')}</button>
               <button onClick={cyclePref4} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference4 === 'Host' ? 'bg-indigo-500/20 text-indigo-400' : draft.preference4 === 'Travel' ? 'bg-cyan-500/20 text-cyan-400' : draft.preference4 === 'Outdoor' ? 'bg-lime-500/20 text-lime-400' : 'bg-amber-500/20 text-amber-400'}`}>{tPref(lang, draft.preference4 || 'Travel')}</button>
+              <span className="text-[9px] text-[#8E8E93] ml-1">👆 Click to change</span>
             </div>
           </div>
         </div>

@@ -369,13 +369,14 @@ function PhotoOverlay({ user, onClose, onMessage, lang, ownProfile }: { user: Us
           <>
             <div ref={scrollRef} onScroll={handleScroll} className="w-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
               {photos.map((photo, i) => (
-                <div key={i} className="w-full flex-shrink-0 snap-center flex items-center justify-center">
+                <div key={i} className="w-full h-full flex-shrink-0 snap-center flex items-center justify-center">
                   <img
                     src={photo}
                     alt={`${user.name} ${i + 1}`}
                     className="max-w-full max-h-[65vh] object-contain"
                     draggable={false}
                     referrerPolicy="no-referrer"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 </div>
               ))}
@@ -585,7 +586,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
         <img
           src={photo}
           alt={user.name}
-          className={`absolute inset-0 w-full h-full object-cover ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute inset-0 w-full h-full object-cover z-10 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           style={{ transition: 'opacity 0.3s' }}
           onLoad={() => setImgLoaded(true)}
           onError={() => setImgFailed(true)}
