@@ -659,7 +659,8 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All')
   const [seekingFilter, setSeekingFilter] = useState<'All' | 'Men' | 'Women' | 'Both'>('All')
   const [photoFilter, setPhotoFilter] = useState<'All' | 'Has Photo' | 'No Photo'>('All')
-  const [showTestUsers, setShowTestUsers] = useState(false)
+  // Admin: hidden test users removed
+  // const [showTestUsers, setShowTestUsers] = useState(false)
 
   const LANG_CYCLE: Lang[] = ['en', 'tc', 'sc', 'ru']
   const cycleLang = () => {
@@ -702,10 +703,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     if (onlineOnly && !isRecentlyActive(u)) return false
     // Test users: hidden by default, admin can show
     // When shown, test users go through SAME filters as real users
-    if (u.tgUsername === '_test_') {
-      if (!showTestUsers) return false
-      // Continue to role + pref filters below (test users are NOT exempt)
-    }
+    if (u.tgUsername === '_test_') return false
     
     // LMN filters
     if (genderFilter !== 'All' && u.gender !== genderFilter) return false
@@ -755,17 +753,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
         {/* RIGHT: Test Users | Invisible | Unlock | Refresh | Language */}
         <div className="flex items-center gap-2">
-          {/* Admin: Show test users */}
-          {isAdmin && (
-            <button
-              onClick={() => setShowTestUsers(!showTestUsers)}
-              className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${showTestUsers ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'}`}
-              title={showTestUsers ? 'Hide Test Users' : 'Show Test Users'}
-            >
-              {showTestUsers ? '🧪' : '👤'}
-            </button>
-          )}
-
           {/* Invisible mode toggle */}
           <button
             onClick={onToggleInvisible}
@@ -1448,7 +1435,23 @@ export default function App() {
     } catch { /* Worker failed, silently ignore */ }
   }
 
-  // ─── Unlock Profile Lock — 100 Stars for non-admin ─────────────────
+  // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const tg = getTg()
+      const user = tg?.initDataUnsafe?.user
+      if (user && user.id) {
+        const adminCheck = isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)
+        if (adminCheck !== isAdmin) {
+          console.log(`Admin re-check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
+          setIsAdmin(adminCheck)
+        }
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isAdmin])
+
+
   const promptUnlockProfile = useCallback(async () => {
     if (isAdmin) {
       setAdminAction('release')

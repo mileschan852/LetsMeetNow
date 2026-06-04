@@ -544,7 +544,8 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   const [hostFilter, setHostFilter] = useState<'All' | 'Host' | 'Travel' | 'Outdoor' | 'Sauna'>('All')
   const [roleFilter, setRoleFilter] = useState<RoleFilterMode>('All')
   const [photoFilter, setPhotoFilter] = useState<'有圖' | '沒圖'>('沒圖')
-  const [showTestUsers, setShowTestUsers] = useState(false)
+  // Admin: hidden test users removed
+  // const [showTestUsers, setShowTestUsers] = useState(false)
 
   const LANG_CYCLE: Lang[] = ['en', 'tc', 'sc', 'ru']
   const cycleLang = () => {
@@ -602,10 +603,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     if (onlineOnly && !isRecentlyActive(u)) return false
     // Test users: hidden by default, admin can show
     // When shown, test users go through SAME filters as real users
-    if (u.tgUsername === '_test_') {
-      if (!showTestUsers) return false
-      // Continue to role + pref filters below (test users are NOT exempt)
-    }
+    if (u.tgUsername === '_test_') return false
     
     // 1. Role filter
     if (isAdmin && roleFilter !== 'All') {
@@ -702,17 +700,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
         {/* RIGHT: Test Users | Invisible | Unlock | Refresh | Language */}
         <div className="flex items-center gap-2">
-          {/* Admin: Show test users */}
-          {isAdmin && (
-            <button
-              onClick={() => setShowTestUsers(!showTestUsers)}
-              className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${showTestUsers ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'}`}
-              title={showTestUsers ? 'Hide Test Users' : 'Show Test Users'}
-            >
-              {showTestUsers ? '🧪' : '👤'}
-            </button>
-          )}
-
           {/* Invisible mode toggle */}
           <button
             onClick={onToggleInvisible}
