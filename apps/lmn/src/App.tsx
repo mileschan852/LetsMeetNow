@@ -626,7 +626,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
 
 // ─── Main Screen ──────────────────────────────────────────────────────
 
-function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
+function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
   ownProfile: UserProfile
   users: UserProfile[]
   onViewOwnProfile: () => void
@@ -639,6 +639,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   isAdmin: boolean
   filtersUnlocked: boolean
   onPromptUnlock: () => void
+  onPromptFilterUnlock: () => void
   onToggleInvisible: () => void
   gridRowsUnlocked: number
   lastRefreshTime: number
@@ -1393,6 +1394,59 @@ export default function App() {
 
   // "Show More Users" button → unlock +1 grid row (5 users)
   // Admin skips payment, regular users pay 1000 Stars
+
+  // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const tg = getTg()
+      const user = tg?.initDataUnsafe?.user
+      if (user && user.id) {
+        const adminCheck = isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)
+        if (adminCheck !== isAdmin) {
+          console.log(`Admin re-check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
+          setIsAdmin(adminCheck)
+        }
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isAdmin])
+
+  // ─── Filter unlock: purchase 30-day filter access ──────────────────
+  const promptFilterUnlock = async () => {
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
+    // Admin bypass: skip Stars payment, unlock directly
+    if (isAdmin) {
+      setFiltersUnlocked(true)
+      const now = Date.now()
+      storageSet(CLOUD.filtersUnlocked, 'true')
+      storageSet(CLOUD.filtersUnlockedAt, String(now))
+      return
+    }
+    if (!userId) return
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8000)
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, amount: 500, purpose: 'filters' }),
+        signal: ctrl.signal,
+      })
+      clearTimeout(timer)
+      const data = await res.json()
+      if (data.ok && data.invoice_url && tg?.openInvoice) {
+        tg.openInvoice(data.invoice_url, async (status) => {
+          if (status === 'paid') {
+            setFiltersUnlocked(true)
+            const now = Date.now()
+            storageSet(CLOUD.filtersUnlocked, 'true')
+            storageSet(CLOUD.filtersUnlockedAt, String(now))
+          }
+        })
+      }
+    } catch { /* Worker failed, silently ignore */ }
+  }
 
   // ─── Unlock Profile Lock — 100 Stars for non-admin ─────────────────
   const promptUnlockProfile = useCallback(async () => {
@@ -2208,6 +2262,7 @@ export default function App() {
             isAdmin={isAdmin}
             filtersUnlocked={isAdmin || filtersUnlocked}
             onPromptUnlock={promptUnlock}
+            onPromptFilterUnlock={promptFilterUnlock}
             gridRowsUnlocked={gridRowsUnlocked}
             channelFollowUnlock={channelFollowUnlock}
             onClaimChannelFollow={handleClaimChannelFollow}
