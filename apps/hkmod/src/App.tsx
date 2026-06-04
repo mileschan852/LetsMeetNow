@@ -506,7 +506,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
 
 // ─── Main Screen ──────────────────────────────────────────────────────
 
-function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
+function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
   ownProfile: UserProfile
   users: UserProfile[]
   onViewOwnProfile: () => void
@@ -519,6 +519,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   isAdmin: boolean
   filtersUnlocked: boolean
   onPromptUnlock: () => void
+  onPromptFilterUnlock: () => void
   onToggleInvisible: () => void
   gridRowsUnlocked: number
   lastRefreshTime: number
@@ -813,7 +814,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
               {roleFilter === 'All' ? t(lang, 'allRoles') : roleFilter}
             </button>
           ) : (
-            <button onClick={onPromptUnlock}
+            <button onClick={onPromptFilterUnlock}
               className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
               title="Purchase filters to unlock"
             >
@@ -829,7 +830,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
               {tPref(lang, pref1Filter)}
             </button>
           ) : (
-            <button onClick={onPromptUnlock}
+            <button onClick={onPromptFilterUnlock}
               className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
             >
               🔒 {tPref(lang, pref1Filter)}
@@ -851,7 +852,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
               {tPref(lang, pref3Filter)}
             </button>
           ) : (
-            <button onClick={onPromptUnlock}
+            <button onClick={onPromptFilterUnlock}
               className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]"
             >
               🔒 {tPref(lang, pref3Filter)}
@@ -875,7 +876,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         )}
 
 {(() => {
-          const effectiveRows = gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
+          const effectiveRows = 2 + gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
           const unlockedSlots = effectiveRows * 5
           const totalRealUsers = sortedUsers.length
           const hasMoreUsers = totalRealUsers > unlockedSlots
@@ -1335,6 +1336,7 @@ export default function App() {
   // Admin skips payment, regular users pay 1000 Stars
 
   // ─── Unlock Profile Lock — 100 Stars for non-admin ─────────────────
+  // @ts-ignore - used as prop for MainScreen
   const promptUnlockProfile = useCallback(async () => {
     if (isAdmin) {
       setAdminAction('release')
@@ -1513,7 +1515,59 @@ export default function App() {
     } catch { /* Worker failed, silently ignore */ }
   }
 
-  // ─── Channel Follow Unlock — +1 row for following @HKMO_D ─────────
+  // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const tg = getTg()
+      const user = tg?.initDataUnsafe?.user
+      if (user && user.id) {
+        const adminCheck = isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)
+        if (adminCheck !== isAdmin) {
+          console.log(`Admin re-check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
+          setIsAdmin(adminCheck)
+        }
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isAdmin])
+
+  // ─── Filter unlock: purchase 30-day filter access ──────────────────
+  const promptFilterUnlock = async () => {
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
+    // Admin bypass: skip Stars payment, unlock directly
+    if (isAdmin) {
+      setFiltersUnlocked(true)
+      const now = Date.now()
+      storageSet(CLOUD.filtersUnlocked, 'true')
+      storageSet(CLOUD.filtersUnlockedAt, String(now))
+      return
+    }
+    if (!userId) return
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8000)
+      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, amount: 500, purpose: 'filters' }),
+        signal: ctrl.signal,
+      })
+      clearTimeout(timer)
+      const data = await res.json()
+      if (data.ok && data.invoice_url && tg?.openInvoice) {
+        tg.openInvoice(data.invoice_url, async (status) => {
+          if (status === 'paid') {
+            setFiltersUnlocked(true)
+            const now = Date.now()
+            storageSet(CLOUD.filtersUnlocked, 'true')
+            storageSet(CLOUD.filtersUnlockedAt, String(now))
+          }
+        })
+      }
+    } catch { /* Worker failed, silently ignore */ }
+  }
+
   const handleClaimChannelFollow = useCallback(async () => {
     if (channelFollowUnlock) return
     // Open the channel
@@ -2123,6 +2177,7 @@ export default function App() {
             isAdmin={isAdmin}
             filtersUnlocked={isAdmin || filtersUnlocked}
             onPromptUnlock={promptUnlock}
+            onPromptFilterUnlock={promptFilterUnlock}
             gridRowsUnlocked={gridRowsUnlocked}
             channelFollowUnlock={channelFollowUnlock}
             onClaimChannelFollow={handleClaimChannelFollow}
@@ -2175,7 +2230,7 @@ export default function App() {
           <PhotoOverlay user={photoOverlay} onClose={() => setPhotoOverlay(null)} onMessage={handleMessage} lang={lang} />
         )}
         {/* Debug overlay — always visible at TOP to help diagnose black screen */}
-        <div className="fixed top-0 left-0 right-0 z-[70] pointer-events-none" style={{ position: 'fixed', top: 0, left: 0, right: 0 }}>
+        <div className="fixed top-0 left-0 right-0 z-[70] pointer-events-none">
           <div className="mx-auto max-w-[min(520px,100vw)] px-2">
             <div className="bg-[#FF6B35] text-black text-[11px] font-mono font-bold p-2 rounded-b-lg inline-block shadow-lg">
               HKMOD DEBUG: g:{groupCheck} l:{locationGranted ? '1' : '0'} v:{view} u:{users.length} load:{isLoadingUsers ? '1' : '0'} adm:{isAdmin ? '1' : '0'} tg:{!!getTg() ? '1' : '0'}
