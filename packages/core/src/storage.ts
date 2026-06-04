@@ -29,8 +29,12 @@ export function getTg(): TgWebApp | undefined {
 }
 
 export function isInTelegram(): boolean {
-  const tg = getTg()
-  return !!(tg?.initData && tg.initData.length > 0)
+  try {
+    const tg = (window as any).Telegram?.WebApp
+    // Be lenient: WebApp object exists = we're in Telegram
+    // initData may be empty when opened from bot menu button
+    return !!tg && typeof tg.ready === 'function'
+  } catch { return false }
 }
 
 export function getUserId(): number | null {
