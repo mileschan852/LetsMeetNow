@@ -22,10 +22,7 @@ body {
   display: block;
   padding-bottom: 80%;
 }
-.tile-aspect > * {
-  position: absolute;
-  inset: 0;
-}
+/* Note: Children must set their own absolute positioning */
 
 /* ─── App-specific styles ───────────────────────────────────────────── */
 .gradient-text {
