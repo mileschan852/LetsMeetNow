@@ -8,6 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'react': path.resolve(__dirname, './node_modules/react'),
+      'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
       'dating-core': path.resolve(__dirname, '../../packages/core/src'),
       'dating-ui': path.resolve(__dirname, '../../packages/ui/src'),
     },
