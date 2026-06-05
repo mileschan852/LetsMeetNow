@@ -11,6 +11,7 @@ const BOT_TOKEN = process.env.LMN_BOT_TOKEN!
 const SUPABASE_URL = process.env.SUPABASE_URL!
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!
 const WEBAPP_URL = process.env.LMN_WEBAPP_URL! // GitHub Pages URL
+const CHANNEL_ID = process.env.LMN_CHANNEL_ID || '' // Channel ID for posting (e.g. -1001234567890)
 
 // ─── Owner & Admin Config ────────────────────────────────────────────
 // Owner is always admin, no need to add manually
@@ -193,6 +194,51 @@ bot.command('stats', async (ctx) => {
   }
   
   await ctx.reply(msg)
+})
+
+// ─── Channel Post Commands ───────────────────────────────────────
+
+bot.command('post', async (ctx) => {
+  if (!(await isAdmin(ctx))) return
+  if (!CHANNEL_ID) {
+    await ctx.reply('❌ Channel not configured.')
+    return
+  }
+  
+  try {
+    await bot.api.sendMessage(CHANNEL_ID, '🚀 Find your match on Let\'s Meet Now!', {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: 'Open LMN 🚀', web_app: { url: WEBAPP_URL } }
+        ]]
+      }
+    })
+    await ctx.reply('✅ Posted to channel.')
+  } catch (err) {
+    await ctx.reply(`❌ Failed to post: ${err}`)
+  }
+})
+
+bot.command('pin', async (ctx) => {
+  if (!(await isAdmin(ctx))) return
+  if (!CHANNEL_ID) {
+    await ctx.reply('❌ Channel not configured.')
+    return
+  }
+  
+  try {
+    const msg = await bot.api.sendMessage(CHANNEL_ID, '🚀 Find your match on Let\'s Meet Now!', {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: 'Open LMN 🚀', web_app: { url: WEBAPP_URL } }
+        ]]
+      }
+    })
+    await bot.api.pinChatMessage(CHANNEL_ID, msg.message_id)
+    await ctx.reply('✅ Posted and pinned to channel.')
+  } catch (err) {
+    await ctx.reply(`❌ Failed to pin: ${err}`)
+  }
 })
 
 // ─── Stars Payment Handler ───────────────────────────────────────────

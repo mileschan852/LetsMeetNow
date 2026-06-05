@@ -206,6 +206,51 @@ bot.command('stats', async (ctx) => {
   await ctx.reply(msg)
 })
 
+// ─── Channel Post Commands ───────────────────────────────────────
+
+bot.command('post', async (ctx) => {
+  if (!(await isAdmin(ctx))) return
+  if (!CHANNEL_ID) {
+    await ctx.reply('❌ Channel not configured.')
+    return
+  }
+  
+  try {
+    await bot.api.sendMessage(CHANNEL_ID, '🚀 Find your match on HKMOD!', {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: 'Open HKMOD 🚀', web_app: { url: WEBAPP_URL } }
+        ]]
+      }
+    })
+    await ctx.reply('✅ Posted to channel.')
+  } catch (err) {
+    await ctx.reply(`❌ Failed to post: ${err}`)
+  }
+})
+
+bot.command('pin', async (ctx) => {
+  if (!(await isAdmin(ctx))) return
+  if (!CHANNEL_ID) {
+    await ctx.reply('❌ Channel not configured.')
+    return
+  }
+  
+  try {
+    const msg = await bot.api.sendMessage(CHANNEL_ID, '🚀 Find your match on HKMOD!', {
+      reply_markup: {
+        inline_keyboard: [[
+          { text: 'Open HKMOD 🚀', web_app: { url: WEBAPP_URL } }
+        ]]
+      }
+    })
+    await bot.api.pinChatMessage(CHANNEL_ID, msg.message_id)
+    await ctx.reply('✅ Posted and pinned to channel.')
+  } catch (err) {
+    await ctx.reply(`❌ Failed to pin: ${err}`)
+  }
+})
+
 // ─── Stars Payment Handler ─────────────────────────────────────────
 
 bot.on('pre_checkout_query', async (ctx) => {
