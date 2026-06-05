@@ -453,6 +453,12 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
   const photo = user.tgPhotoUrl
   const roleLabel = getGridRoleLabel(user.position, user.isSide)
 
+  // Reset photo state when photo URL changes
+  useEffect(() => {
+    setImgLoaded(false)
+    setImgFailed(false)
+  }, [photo])
+
   return (
     <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
       {/* Invisible eye icon — shown on own profile when invisible, or admin sees on all invisible users */}
@@ -1020,6 +1026,11 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
 
   useEffect(() => { setDraft({ ...profile }) }, [profile.id])
 
+  // Sync photo updates from profile without resetting entire draft
+  useEffect(() => {
+    setDraft(prev => ({ ...prev, tgPhotoUrl: profile.tgPhotoUrl, tgPhotos: profile.tgPhotos }))
+  }, [profile.tgPhotoUrl, profile.tgPhotos])
+
   // Reset photo state when photo URL changes
   useEffect(() => {
     setPhotoLoaded(false)
@@ -1575,7 +1586,7 @@ export default function App() {
     } catch {}
     // Give the unlock immediately (we trust the user - it's a one-time thing)
     setChannelFollowUnlock(1)
-    cloudSet(CLOUD.channelFollowed, '1')
+    storageSet(CLOUD.channelFollowed, '1')
   }, [channelFollowUnlock])
 
   // Invisible mode payment — 2000 Stars for 30 days

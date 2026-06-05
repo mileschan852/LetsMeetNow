@@ -12,6 +12,9 @@ const BOT_TOKEN = process.env.HKMOD_BOT_TOKEN!
 const SUPABASE_URL = process.env.SUPABASE_URL!
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!
 const WEBAPP_URL = process.env.HKMOD_WEBAPP_URL! // GitHub Pages URL
+const CHANNEL_ID = process.env.HKMOD_CHANNEL_ID || '' // Channel ID for posting (e.g. -1001234567890)
+
+let botUsername = ''
 
 // ─── Owner & Admin Config ────────────────────────────────────────────
 // Owner is always admin, no need to add manually
