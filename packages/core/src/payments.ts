@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import { getTg, getUserId } from './storage'
 
 export interface PaymentUnlockOptions {
@@ -20,7 +19,7 @@ export function usePaymentUnlock({
   onPaymentSuccess,
   onError,
 }: PaymentUnlockOptions) {
-  return useCallback(async () => {
+  return async () => {
     if (isAdmin) {
       onAdminUnlock()
       return
@@ -64,7 +63,7 @@ export function usePaymentUnlock({
     } catch (err) {
       onError?.(err)
     }
-  }, [isAdmin, workerUrl, amount, purpose, onAdminUnlock, onPaymentSuccess, onError])
+  }
 }
 
 export async function requestPayment(
