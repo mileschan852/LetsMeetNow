@@ -515,6 +515,80 @@ function LocationGate({ onGranted, lang }: { onGranted: (lat: number, lng: numbe
   )
 }
 
+// ─── Unlock Tip Cycle — cycles through ways to unlock more rows ──────
+
+function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
+  const [idx, setIdx] = useState(0)
+  const tips: Record<Lang, string[]> = {
+    en: [
+      `Base: 2 rows free`,
+      isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)`,
+      `Purchased: ${gridRowsUnlocked} rows`,
+      `Add a Telegram photo +1`,
+      `Boost LMN Channel +1~4`,
+      `⭐ = charge stars per message`,
+      channelFollowUnlock ? `Group: +1 row ✅` : `Join LMN Channel +1`,
+      `Buy rows with ⭐ Stars`,
+    ],
+    tc: [
+      `基礎: 2 行免費`,
+      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
+      `已購: ${gridRowsUnlocked} 行`,
+      `加入 Telegram 頭像 +1`,
+      `Boost LMN Channel +1~4`,
+      `⭐ = 按訊息收費`,
+      channelFollowUnlock ? `群組: +1 行 ✅` : `加入 LMN Channel +1`,
+      `用 ⭐ 星星購買行數`,
+    ],
+    sc: [
+      `基础: 2 行免费`,
+      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
+      `已购: ${gridRowsUnlocked} 行`,
+      `加入 Telegram 头像 +1`,
+      `Boost LMN Channel +1~4`,
+      `⭐ = 按消息收费`,
+      channelFollowUnlock ? `群组: +1 行 ✅` : `加入 LMN Channel +1`,
+      `用 ⭐ 星星购买行数`,
+    ],
+    ru: [
+      `База: 2 строки бесплатно`,
+      isPremium ? `Premium: +1 строка` : `Premium: +1 строка (не активен)`,
+      `Куплено: ${gridRowsUnlocked} строк`,
+      `Добавь фото в Telegram +1`,
+      `Boost LMN Channel +1~4`,
+      `⭐ = плата за сообщение`,
+      channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в LMN Channel +1`,
+      `Купить строки за ⭐`,
+    ],
+  }
+  const list = tips[lang] || tips.en
+
+  // Auto-rotate every 5 seconds
+  useEffect(() => {
+    const i = setInterval(() => setIdx(i => (i + 1) % list.length), 5000)
+    return () => clearInterval(i)
+  }, [list.length])
+
+  const current = list[idx % list.length]
+  const isChannelTip = idx % list.length === 6
+
+  return (
+    <button
+      onClick={() => {
+        if (isChannelTip && !channelFollowUnlock) {
+          onClaimChannelFollow()
+        } else {
+          setIdx((i) => i + 1)
+        }
+      }}
+      className="ml-auto flex items-center gap-1 text-[9px] text-[#8E8E93] nav-press"
+    >
+      <span className="w-4 h-4 rounded-full bg-[#2C2C2E] flex items-center justify-center">💡</span>
+      <span className={`truncate max-w-[140px] ${isChannelTip && !channelFollowUnlock ? 'text-[#5AC8FA]' : ''}`}>{current}</span>
+    </button>
+  )
+}
+
 // ─── Profile Grid Tile ───────────────────────────────────────────────
 
 function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => void }) {

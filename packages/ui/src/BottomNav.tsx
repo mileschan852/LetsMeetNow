@@ -69,7 +69,7 @@ export function BottomNav({
             <Send className="w-4 h-4 text-white" />
           </button>
         </div>
-        <nav className="h-14 flex items-center justify-around">
+        <nav className="w-full h-14 flex items-center justify-around">
           <button className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
             <Grid3X3 className="w-5 h-5" />
             <span className="text-[9px] font-medium">{t(lang, 'profiles')}</span>
