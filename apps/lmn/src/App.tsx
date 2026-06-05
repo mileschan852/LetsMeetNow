@@ -1420,7 +1420,7 @@ export default function App() {
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'edit' }),
@@ -1488,7 +1488,7 @@ export default function App() {
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'raffle' }),
@@ -1565,7 +1565,7 @@ export default function App() {
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, amount: 1000, purpose: 'grid' }),
@@ -1612,7 +1612,7 @@ export default function App() {
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
+      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, amount: 2000, purpose: 'invisible' }),
