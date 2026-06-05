@@ -51,7 +51,7 @@ export function BottomNav({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-xl border-t border-[#2C2C2E]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <div className="max-w-[min(520px,100vw)] mx-auto">
+      <div className="w-full max-w-[min(520px,100vw)] mx-auto">
         <div className="flex items-center gap-2 px-3 py-2">
           <input
             type="text"
