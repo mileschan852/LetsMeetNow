@@ -291,8 +291,14 @@ function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
 function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; onClose: () => void; onMessage: (u: UserProfile) => void; lang: Lang }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
+  const [imgStates, setImgStates] = useState<{ loaded: boolean; failed: boolean }[]>([])
   const photos = user.tgPhotos?.length ? user.tgPhotos : (user.tgPhotoUrl ? [user.tgPhotoUrl] : [])
   const role = formatRole(user.position, user.isSide)
+
+  // Initialize image states when photos change
+  useEffect(() => {
+    setImgStates(photos.map(() => ({ loaded: false, failed: false })))
+  }, [photos.join(',')])
 
   const handleScroll = () => {
     if (!scrollRef.current) return
@@ -308,17 +314,35 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
       <div className="flex-1 flex items-center relative">
         {photos.length > 0 ? (
           <>
-            <div ref={scrollRef} onScroll={handleScroll} className="w-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
+            <div ref={scrollRef} onScroll={handleScroll} className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
               {photos.map((photo, i) => (
-                <div key={i} className="w-full h-full flex-shrink-0 snap-center flex items-center justify-center">
-                  <img
-                    src={photo}
-                    alt={`${user.name} ${i + 1}`}
-                    className="max-w-full max-h-[65vh] object-contain"
-                    draggable={false}
-                    referrerPolicy="no-referrer"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                  />
+                <div key={i} className="w-full h-full flex-shrink-0 snap-center flex items-center justify-center relative">
+                  {!imgStates[i]?.failed && (
+                    <img
+                      src={photo}
+                      alt={`${user.name} ${i + 1}`}
+                      className={`max-w-full max-h-[65vh] object-contain transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}`}
+                      draggable={false}
+                      referrerPolicy="no-referrer"
+                      onLoad={() => setImgStates(prev => {
+                        const next = [...prev]
+                        next[i] = { ...next[i], loaded: true }
+                        return next
+                      })}
+                      onError={() => setImgStates(prev => {
+                        const next = [...prev]
+                        next[i] = { ...next[i], failed: true }
+                        return next
+                      })}
+                    />
+                  )}
+                  {(!imgStates[i]?.loaded || imgStates[i]?.failed) && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
+                        <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
