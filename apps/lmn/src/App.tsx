@@ -1,5 +1,5 @@
 import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto } from 'dating-core'
-import { RaffleStatusDisplay, RaffleButton } from 'dating-ui'
+import { RaffleStatusDisplay, RaffleButton, BottomNav } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/lmn-logo.svg'
@@ -1287,92 +1287,6 @@ function FlyingMessagesOverlay({ messages, onDone }: { messages: {id: number; te
 
 // ─── Bottom Nav ─────────────────────────────────────────────────────-
 
-function BottomNav({ lang, cooldownRemaining, onSend }: { lang: Lang; cooldownRemaining: number; onSend: (text: string) => void }) {
-  const [inputText, setInputText] = useState('')
-
-  const handleGroupChat = () => {
-    const url = 'https://t.me/LetsMeetNow'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(url); return }
-      if (tg?.openLink) { tg.openLink(url, { try_instant_view: false }); return }
-    } catch {}
-    window.open(url, '_blank')
-  }
-
-  const handleRefer = () => {
-    // Open Telegram native share dialog — user picks who to share with
-    const shareUrl = 'https://t.me/share/url?url=https://t.me/LetsMsetNow_Bot?startapp&text=Check%20out%20LMN%20-%20Let%27s%20Meet%20Now%20Dating!'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(shareUrl); return }
-    } catch {}
-    window.open(shareUrl, '_blank')
-  }
-
-  const handleWallet = () => {
-    const tonUrl = 'https://t.me/wallet?startattach=transfer_UQD9Irrhhpj2aAa48W-XaL5q9vPD9Zf5UjXhC7aHcYcSnYo4'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(tonUrl); return }
-    } catch {}
-    window.open(tonUrl, '_blank')
-  }
-
-  const handleSend = () => {
-    if (!inputText.trim() || cooldownRemaining > 0) return
-    const text = inputText.trim()
-    onSend(text) // trigger flying animation + Supabase store
-    setInputText('')
-  }
-
-  return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-xl border-t border-[#2C2C2E]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <div className="max-w-[min(520px,100vw)] mx-auto">
-        {/* Input row above bottom nav */}
-        <div className="flex items-center gap-2 px-3 py-2">
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            onFocus={(e) => { if (e.target.placeholder === '發送彈幕') e.target.placeholder = '' }}
-            onBlur={(e) => { if (!e.target.value) e.target.placeholder = '發送彈幕' }}
-            placeholder="發送彈幕"
-            className="flex-1 h-9 px-3 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] text-sm text-white placeholder-[#8E8E93] focus:outline-none focus:border-[#FF6B35]/50"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!inputText.trim()}
-            className="w-9 h-9 rounded-full bg-[#FF6B35] flex items-center justify-center nav-press disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <Send className="w-4 h-4 text-white" />
-          </button>
-        </div>
-        {/* Bottom nav buttons */}
-        <nav className="h-14 flex items-center justify-around">
-          <button className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Grid3X3 className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'profiles')}</span>
-          </button>
-          <button onClick={handleGroupChat} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Users className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'groupChat')}</span>
-          </button>
-          <button onClick={handleRefer} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Gift className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'refer')}</span>
-          </button>
-          <button onClick={handleWallet} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
-            <Wallet className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'wallet')}</span>
-          </button>
-        </nav>
-      </div>
-    </div>
-  )
-}
-
 // ─── App Component ───────────────────────────────────────────────────
 
 export default function App() {
@@ -2436,6 +2350,9 @@ export default function App() {
                 top_percent: Math.round(top),
               })
             }}
+            groupChatUrl="https://t.me/LetsMeetNow"
+            referShareUrl="https://t.me/share/url?url=https://t.me/LetsMsetNow_Bot?startapp&text=Check%20out%20LMN%20-%20Let%27s%20Meet%20Now%20Dating!"
+            walletUrl="https://t.me/wallet?startattach=transfer_UQD9Irrhhpj2aAa48W-XaL5q9vPD9Zf5UjXhC7aHcYcSnYo4"
           />
         )}
       </div>
