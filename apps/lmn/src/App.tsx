@@ -21,7 +21,7 @@ import {
   RefreshCw,
   Send,
 } from 'lucide-react'
-import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, type DbUser, type Raffle } from './lib/supabase'
+import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -1407,8 +1407,12 @@ export default function App() {
     if (isAdmin) {
       setFiltersUnlocked(true)
       const now = Date.now()
+      const expiresAt = new Date(now + 30 * 86400000).toISOString()
       storageSet(CLOUD.filtersUnlocked, 'true')
       storageSet(CLOUD.filtersUnlockedAt, String(now))
+      if (userId) {
+        saveFiltersUnlocked(userId, true, expiresAt)
+      }
       return
     }
     if (!userId) return
@@ -1428,8 +1432,10 @@ export default function App() {
           if (status === 'paid') {
             setFiltersUnlocked(true)
             const now = Date.now()
+            const expiresAt = new Date(now + 30 * 86400000).toISOString()
             storageSet(CLOUD.filtersUnlocked, 'true')
             storageSet(CLOUD.filtersUnlockedAt, String(now))
+            saveFiltersUnlocked(userId, true, expiresAt)
           }
         })
       }
@@ -2066,6 +2072,39 @@ export default function App() {
   const handleSaveProfile = useCallback((updated: UserProfile) => {
     console.log('Saving profile:', { age: updated.age, height: updated.height, weight: updated.weight, position: updated.position, isSide: updated.isSide })
     setOwnProfile(updated)
+    // Sync to Supabase
+    const uid = tgUserId.current
+    if (uid && updated.lat && updated.lng) {
+      upsertUser({
+        id: uid,
+        name: updated.name,
+        photo_url: updated.tgPhotoUrl || null,
+        height: updated.height,
+        weight: updated.weight,
+        position: updated.position,
+        is_side: updated.isSide,
+        preference1: updated.preference1 || 'Raw',
+        preference2: updated.preference2 || 'Party',
+        preference3: updated.preference3 || 'Group',
+        preference4: updated.preference4 || 'Travel',
+        open_to_messages: updated.openToMessages || false,
+        tg_username: updated.tgUsername || null,
+        lat: updated.lat,
+        lng: updated.lng,
+        is_online: true,
+        updated_at: new Date().toISOString(),
+        // LMN fields
+        dob: updated.dob || null,
+        gender: updated.gender || 'Male',
+        seeking_gender: updated.seekingGender || 'Women',
+        seeking_today: updated.seekingToday || 'Just Browsing',
+        hide_age: updated.hideAge || false,
+      }).then(result => {
+        console.log('Profile upsert result:', result ? 'success' : 'failed')
+      }).catch(err => {
+        console.error('Profile upsert error:', err)
+      })
+    }
   }, [])
 
   // ─── Message handler ──────────────────────────────────────────────

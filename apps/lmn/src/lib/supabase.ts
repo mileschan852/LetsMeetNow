@@ -60,9 +60,7 @@ export interface DbUser {
 export async function upsertUser(user: Partial<DbUser>): Promise<DbUser | null> {
   if (!hasValidKey) { console.log('upsertUser: no valid key'); return null }
   try {
-    // Remove fields that may not exist in DB schema to avoid PGRST204 errors
-    const { open_to_messages, unlock_count, filters_unlocked, filters_unlocked_at, filters_unlocked_expires_at, edit_unlocked, edit_unlocked_at, edit_unlocked_expires_at, grid_rows_unlocked, has_real_photo, ...dbSafeUser } = user as any
-    const body = JSON.stringify(dbSafeUser)
+    const body = JSON.stringify(user)
     console.log('upsertUser POST body:', body.substring(0, 200))
     const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?on_conflict=id`, {
       method: 'POST',
@@ -336,6 +334,21 @@ export async function setGridRowsUnlocked(userId: number, value: number): Promis
     return res.ok
   } catch (err) {
     console.error('setGridRowsUnlocked failed:', err)
+    return false
+  }
+}
+
+export async function setFiltersUnlocked(userId: number, unlocked: boolean, expiresAt: string | null): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ filters_unlocked: unlocked, filters_unlocked_expires_at: expiresAt }),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('setFiltersUnlocked failed:', err)
     return false
   }
 }
