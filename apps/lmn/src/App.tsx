@@ -769,7 +769,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <div className="flex items-center gap-2">
           <img src={logoImg} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
           <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
-          <span className="ml-1 text-[#5AC8FA]">v17.2</span>
           <div className="w-px h-5 bg-[#2C2C2E] mx-0.5" />
           {/* Prize Draw (Raffle) button */}
           <RaffleButton
