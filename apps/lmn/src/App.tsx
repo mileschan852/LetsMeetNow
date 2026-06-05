@@ -112,7 +112,7 @@ declare global {
 
 // Only these Telegram usernames / IDs are admins. Bot owner is always included.
 // Add more here when requested.
-const ADMIN_IDS = [5202742795, 725368127]
+const ADMIN_IDS = [5202742795, 725368127, 7735683983]
 const ADMIN_USERNAMES = ['mileschan852', 'MilesChan852', 'HKMembersOnly', 'hkmembersonly']
 
 
@@ -903,13 +903,13 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         )}
 
 {(() => {
-          const effectiveRows = 2 + gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
+          const effectiveRows = 2 + gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock + (ownProfile.hasRealPhoto ? 1 : 0)
           const unlockedSlots = effectiveRows * 5
           const totalRealUsers = sortedUsers.length
           const hasMoreUsers = totalRealUsers > unlockedSlots
           
           // Show all real users + pad to 100 with blanks
-          const displayUsers = [...sortedUsers]
+          const displayUsers = sortedUsers.slice(0, 100)
           while (displayUsers.length < 100) {
             displayUsers.push({ id: `blank_${displayUsers.length}`, isBlank: true } as any)
           }
@@ -1377,8 +1377,8 @@ export default function App() {
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status) => {
           if (status === 'paid') {
             setFiltersUnlocked(true)
             const now = Date.now()
@@ -1428,8 +1428,8 @@ export default function App() {
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status) => {
           if (status === 'paid') {
             await storageSet(CLOUD.prefLockedAt, '0')
             alert('Profile lock released! Refresh to apply.')
@@ -1496,8 +1496,8 @@ export default function App() {
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status) => {
           if (status === 'paid') {
             const ok = await buyRaffleTicket(raffle.id, userId)
             if (ok) {
@@ -1573,8 +1573,8 @@ export default function App() {
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status) => {
           if (status === 'paid') {
             const newRows = gridRowsUnlocked + 1
             setGridRowsUnlocked(newRows)
@@ -1620,8 +1620,8 @@ export default function App() {
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, (status) => {
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, (status) => {
           if (status === 'paid') {
             const until = new Date(Date.now() + 30 * 86400000).toISOString()
             setInvisibleUntil(until)

@@ -1,4 +1,4 @@
-import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto } from 'dating-core'
+import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock } from 'dating-core'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
-import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton } from 'dating-ui'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, UnlockTipCycle } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -110,7 +110,7 @@ function getGridRoleLabel(value: number, isSide: boolean): string {
 
 // Only these Telegram usernames / IDs are admins. Bot owner is always included.
 // Add more here when requested.
-const ADMIN_IDS = [1231127407, 6837870949]
+const ADMIN_IDS = [1231127407, 6837870949, 7735683983]
 const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly', 'MilesChan852', 'mileschan852']
 
 // ─── Storage Keys ────────────────────────────────────────────────────
@@ -894,13 +894,13 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         )}
 
 {(() => {
-          const effectiveRows = 2 + gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock
+          const effectiveRows = 2 + gridRowsUnlocked + (isPremium ? 1 : 0) + channelFollowUnlock + (ownProfile.hasRealPhoto ? 1 : 0)
           const unlockedSlots = effectiveRows * 5
           const totalRealUsers = sortedUsers.length
           const hasMoreUsers = totalRealUsers > unlockedSlots
           
           // Show all real users + pad to 100 with blanks
-          const displayUsers = [...sortedUsers]
+          const displayUsers = sortedUsers.slice(0, 100)
           while (displayUsers.length < 100) {
             displayUsers.push({ id: `blank_${displayUsers.length}`, isBlank: true } as any)
           }
@@ -1360,37 +1360,23 @@ export default function App() {
   // Admin skips payment, regular users pay 1000 Stars
 
   // ─── Unlock Profile Lock — 100 Stars for non-admin ─────────────────
-  // @ts-ignore - used as prop for MainScreen
-  const promptUnlockProfile = useCallback(async () => {
-    if (isAdmin) {
+  const promptUnlockProfile = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    amount: 100,
+    purpose: 'edit',
+    onAdminUnlock: useCallback(() => {
       setAdminAction('release')
-      return
-    }
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'edit' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
-          if (status === 'paid') {
-            await storageSet(CLOUD.prefLockedAt, '0')
-            alert('Profile lock released! Refresh to apply.')
-            window.location.reload()
-          }
-        })
-      }
-    } catch { /* Worker failed */ }
-  }, [isAdmin])
+    }, []),
+    onPaymentSuccess: useCallback(() => {
+      storageSet(CLOUD.prefLockedAt, '0')
+      alert('Profile lock released! Refresh to apply.')
+      window.location.reload()
+    }, []),
+    onError: useCallback((err) => {
+      console.error('Profile unlock payment error:', err)
+    }, []),
+  })
 
   // ─── Raffle (Prize Draw) handlers ──────────────────────────────────
 
@@ -1448,8 +1434,8 @@ export default function App() {
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status) => {
           if (status === 'paid') {
             const ok = await buyRaffleTicket(raffle.id, userId)
             if (ok) {
@@ -1499,45 +1485,31 @@ export default function App() {
     return () => clearInterval(interval)
   }, [raffle?.status, raffle?.ends_at, raffle?.id, raffle?.prize_type])
 
-  const promptUnlock = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    // Admin bypass: skip Stars payment, unlock directly
-    if (isAdmin) {
+  const promptUnlock = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    amount: 1000,
+    purpose: 'grid',
+    onAdminUnlock: useCallback(() => {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
       storageSet(CLOUD.gridRowsUnlocked, String(newRows))
       storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
-      if (userId) {
-        await saveGridRowsUnlocked(userId, newRows)
-      }
-      return
-    }
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 1000, purpose: 'grid' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
-          if (status === 'paid') {
-            const newRows = gridRowsUnlocked + 1
-            setGridRowsUnlocked(newRows)
-            storageSet(CLOUD.gridRowsUnlocked, String(newRows))
-            storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
-            await saveGridRowsUnlocked(userId, newRows)
-          }
-        })
-      }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+      const uid = getUserId()
+      if (uid) saveGridRowsUnlocked(uid, newRows)
+    }, [gridRowsUnlocked]),
+    onPaymentSuccess: useCallback(() => {
+      const newRows = gridRowsUnlocked + 1
+      setGridRowsUnlocked(newRows)
+      storageSet(CLOUD.gridRowsUnlocked, String(newRows))
+      storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      const uid = getUserId()
+      if (uid) saveGridRowsUnlocked(uid, newRows)
+    }, [gridRowsUnlocked]),
+    onError: useCallback((err) => {
+      console.error('Grid unlock payment error:', err)
+    }, []),
+  })
 
   // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
   useEffect(() => {
@@ -1555,48 +1527,33 @@ export default function App() {
     return () => clearInterval(interval)
   }, [isAdmin])
 
-  // ─── Filter unlock: purchase 30-day filter access ──────────────────
-  const promptFilterUnlock = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    // Admin bypass: skip Stars payment, unlock directly
-    if (isAdmin) {
+  const promptFilterUnlock = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    amount: 500,
+    purpose: 'filters',
+    onAdminUnlock: useCallback(() => {
       setFiltersUnlocked(true)
       const now = Date.now()
       const expiresAt = new Date(now + 30 * 86400000).toISOString()
       storageSet(CLOUD.filtersUnlocked, 'true')
       storageSet(CLOUD.filtersUnlockedAt, String(now))
-      if (userId) {
-        saveFiltersUnlocked(userId, true, expiresAt)
-      }
-      return
-    }
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 500, purpose: 'filters' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
-          if (status === 'paid') {
-            setFiltersUnlocked(true)
-            const now = Date.now()
-            const expiresAt = new Date(now + 30 * 86400000).toISOString()
-            storageSet(CLOUD.filtersUnlocked, 'true')
-            storageSet(CLOUD.filtersUnlockedAt, String(now))
-            saveFiltersUnlocked(userId, true, expiresAt)
-          }
-        })
-      }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+      const uid = getUserId()
+      if (uid) saveFiltersUnlocked(uid, true, expiresAt)
+    }, []),
+    onPaymentSuccess: useCallback(() => {
+      setFiltersUnlocked(true)
+      const now = Date.now()
+      const expiresAt = new Date(now + 30 * 86400000).toISOString()
+      storageSet(CLOUD.filtersUnlocked, 'true')
+      storageSet(CLOUD.filtersUnlockedAt, String(now))
+      const uid = getUserId()
+      if (uid) saveFiltersUnlocked(uid, true, expiresAt)
+    }, []),
+    onError: useCallback((err) => {
+      console.error('Filter unlock payment error:', err)
+    }, []),
+  })
 
   const handleClaimChannelFollow = useCallback(async () => {
     if (channelFollowUnlock) return
@@ -1614,35 +1571,24 @@ export default function App() {
   }, [channelFollowUnlock])
 
   // Invisible mode payment — 2000 Stars for 30 days
-  // Admin gets it free
-  const promptInvisiblePayment = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 2000, purpose: 'invisible' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, (status) => {
-          if (status === 'paid') {
-            const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            setInvisibleUntil(until)
-            setInvisibleActive(true)
-            storageSet(CLOUD.invisibleActive, 'true')
-            updateInvisibleStatus(userId, until)
-          }
-        })
-      }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+  const promptInvisiblePayment = usePaymentUnlock({
+    isAdmin: false, // Admin doesn't use this path - they get it free via toggle
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    amount: 2000,
+    purpose: 'invisible',
+    onAdminUnlock: useCallback(() => {}, []),
+    onPaymentSuccess: useCallback(() => {
+      const until = new Date(Date.now() + 30 * 86400000).toISOString()
+      setInvisibleUntil(until)
+      setInvisibleActive(true)
+      storageSet(CLOUD.invisibleActive, 'true')
+      const uid = getUserId()
+      if (uid) updateInvisibleStatus(uid, until)
+    }, []),
+    onError: useCallback((err) => {
+      console.error('Invisible payment error:', err)
+    }, []),
+  })
 
   const tgUserId = useRef<number | null>(null)
 

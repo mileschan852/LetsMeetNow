@@ -4,5 +4,6 @@ export { getTg, isInTelegram, getUserId, getTgUser, lsSet, lsGet, lsGetAll, make
 export { t, tRole, tZodiac, getLangLabel, mergeDict, getDefaultLang } from './i18n'
 export { hasValidKey, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, getRaffleTickets, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked, fetchNearby, setOnlineStatus, fetchGlobalUnlock, setGlobalUnlock, updateInvisibleStatus, updateHideAgeStatus, updateUserRealPhoto, deleteUser, clearAllUsers, updateUnlockCount, setUnlockCount, upsertUser, fetchUserUnlockStatus, fetchTopics, fetchTravelEntries, insertFlyingMessage, fetchFlyingMessages } from './supabase'
 export type { DbUser, Raffle, FlyingMessage, TravelEntry, DbTopic } from './supabase'
-export { requestPayment, openInvoice } from './payments'
+export { requestPayment, openInvoice, usePaymentUnlock } from './payments'
+export type { PaymentUnlockOptions } from './payments'
 export { isAdminUser, getTimeAgo, getDistance, formatDist, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, isUserActive, isPrefLocked, detectRealPhoto } from './utils'
