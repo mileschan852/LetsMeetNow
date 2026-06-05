@@ -172,11 +172,23 @@ bot.command('draw', async (ctx) => {
     return
   }
   
+  // Get raffle info for prize type
+  const { data: raffleInfo } = await supabase.from('lmn_raffles').select('prize_type').eq('id', raffleId).single()
+  
+  // Apply prize to winner
+  if (raffleInfo?.prize_type === 'invisible') {
+    const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    await supabase.from('lmn_users').update({ invisible_until: until, invisible_purchased_at: new Date().toISOString() }).eq('id', data.winner_id)
+  } else if (raffleInfo?.prize_type === 'filters') {
+    const until = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    await supabase.from('lmn_users').update({ filters_unlocked: true, filters_unlocked_expires_at: until }).eq('id', data.winner_id)
+  }
+  
   await ctx.reply(`🎉 Winner drawn!\nWinner: ${data.winner_name || 'User ' + data.winner_id}\nRaffle #${raffleId} complete.`)
   
   try {
     await bot.api.sendMessage(data.winner_id, 
-      `🎉 Congratulations! You won the raffle!\nPrize: ${data.prize_type === 'invisible' ? '30 days Invisible Mode' : '30 days Filter Unlock'}\nYour prize has been applied.`)
+      `🎉 Congratulations! You won the raffle!\nPrize: ${raffleInfo?.prize_type === 'invisible' ? '30 days Invisible Mode' : '30 days Filter Unlock'}\nYour prize has been applied.`)
   } catch {}
 })
 

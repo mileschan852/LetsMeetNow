@@ -515,6 +515,12 @@ export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<
 export async function buyRaffleTicket(raffleId: number, userId: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
+    // Fetch current ticket count first
+    const getRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffles?id=eq.${raffleId}&select=current_tickets`, { headers })
+    if (!getRes.ok) throw new Error(await getRes.text())
+    const rows = await getRes.json()
+    const current = rows?.[0]?.current_tickets || 0
+
     // Insert ticket
     const ticketRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffle_tickets`, {
       method: 'POST',
@@ -527,9 +533,7 @@ export async function buyRaffleTicket(raffleId: number, userId: number): Promise
     const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/lmn_raffles?id=eq.${raffleId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({
-        current_tickets: { sql: 'current_tickets + 1' },
-      }),
+      body: JSON.stringify({ current_tickets: current + 1 }),
     })
     return updateRes.ok
   } catch (err) {
