@@ -69,22 +69,22 @@ export function BottomNav({
             <Send className="w-4 h-4 text-white" />
           </button>
         </div>
-        <nav className="w-full h-14 flex items-center justify-around">
-          <button className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+        <nav className="w-full h-14 flex items-center justify-between px-4">
+          <button className="nav-press flex flex-col items-center gap-0.5 min-w-[60px] text-[#FF6B35]">
             <Grid3X3 className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'profiles')}</span>
+            <span className="text-[9px] font-medium whitespace-nowrap">{t(lang, 'profiles')}</span>
           </button>
-          <button onClick={handleGroupChat} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+          <button onClick={handleGroupChat} className="nav-press flex flex-col items-center gap-0.5 min-w-[60px] text-[#FF6B35]">
             <Users className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'groupChat')}</span>
+            <span className="text-[9px] font-medium whitespace-nowrap">{t(lang, 'groupChat')}</span>
           </button>
-          <button onClick={handleRefer} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+          <button onClick={handleRefer} className="nav-press flex flex-col items-center gap-0.5 min-w-[60px] text-[#FF6B35]">
             <Gift className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'refer')}</span>
+            <span className="text-[9px] font-medium whitespace-nowrap">{t(lang, 'refer')}</span>
           </button>
-          <button onClick={handleWallet} className="nav-press flex flex-col items-center gap-0.5 min-w-[50px] text-[#FF6B35]">
+          <button onClick={handleWallet} className="nav-press flex flex-col items-center gap-0.5 min-w-[60px] text-[#FF6B35]">
             <Wallet className="w-5 h-5" />
-            <span className="text-[9px] font-medium">{t(lang, 'wallet')}</span>
+            <span className="text-[9px] font-medium whitespace-nowrap">{t(lang, 'wallet')}</span>
           </button>
         </nav>
       </div>

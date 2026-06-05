@@ -769,7 +769,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <div className="flex items-center gap-2">
           <img src={logoImg} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
           <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
-          <span className="ml-1 text-[#5AC8FA]">L2</span>
+          <span className="ml-1 text-[#5AC8FA]">v17.2</span>
           <div className="w-px h-5 bg-[#2C2C2E] mx-0.5" />
           {/* Prize Draw (Raffle) button */}
           <RaffleButton
@@ -842,7 +842,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
-        <span className="ml-1 text-[#5AC8FA]">L2</span>
+        <span className="ml-1 text-[#5AC8FA]">v17.2</span>
       </div>
 
       {showDbWarning && (
