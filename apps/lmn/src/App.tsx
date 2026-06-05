@@ -2358,14 +2358,6 @@ export default function App() {
         )}
       </div>
     </div>
-    {/* Debug overlay — always visible at TOP to help diagnose black screen */}
-    <div className="fixed top-0 left-0 right-0 z-[70] pointer-events-none">
-      <div className="mx-auto max-w-[min(520px,100vw)] px-2">
-        <div className="bg-[#FF6B35] text-black text-[11px] font-mono font-bold p-2 rounded-b-lg inline-block shadow-lg">
-          LMN DEBUG: l:{locationGranted ? '1' : '0'} v:{view} u:{users.length} load:{isLoadingUsers ? '1' : '0'} adm:{isAdmin ? '1' : '0'} tg:{!!getTg() ? '1' : '0'}
-        </div>
-      </div>
-    </div>
   </>
   )
 }
