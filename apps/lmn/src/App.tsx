@@ -1,5 +1,5 @@
 import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto } from 'dating-core'
-import { RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid } from 'dating-ui'
+import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 import logoImg from './assets/lmn-logo.svg'
@@ -349,112 +349,41 @@ function getZodiacEmoji(sign: string): string {
 // ─── Photo Overlay ────────────────────────────────────────────────────
 
 function PhotoOverlay({ user, onClose, onMessage, lang, ownProfile }: { user: UserProfile; onClose: () => void; onMessage: (u: UserProfile) => void; lang: Lang; ownProfile: UserProfile }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [activeIdx, setActiveIdx] = useState(0)
-  const [imgStates, setImgStates] = useState<{ loaded: boolean; failed: boolean }[]>([])
-  const photos = user.tgPhotos?.length ? user.tgPhotos : (user.tgPhotoUrl ? [user.tgPhotoUrl] : [])
-
-  // Initialize image states when photos change
-  useEffect(() => {
-    setImgStates(photos.map(() => ({ loaded: false, failed: false })))
-  }, [photos.join(',')])
-
-  const handleScroll = () => {
-    if (!scrollRef.current) return
-    setActiveIdx(Math.round(scrollRef.current.scrollLeft / scrollRef.current.clientWidth))
-  }
-
   return (
-    <div className="fixed top-0 left-0 right-0 bottom-0 z-[60] bg-black/95 flex flex-col animate-in fade-in duration-200" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-[#1A1A1A]/80 flex items-center justify-center z-20 nav-press">
-        <X className="w-5 h-5 text-white" />
-      </button>
-
-      <div className="flex-1 flex items-center relative">
-        {photos.length > 0 ? (
-          <>
-            <div ref={scrollRef} onScroll={handleScroll} className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
-              {photos.map((photo, i) => (
-                <div key={i} className="w-full h-full flex-shrink-0 snap-center flex items-center justify-center relative">
-                  {!imgStates[i]?.failed && (
-                    <img
-                      src={photo}
-                      alt={`${user.name} ${i + 1}`}
-                      className={`max-w-full max-h-[65vh] object-contain transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}`}
-                      draggable={false}
-                      referrerPolicy="no-referrer"
-                      onLoad={() => setImgStates(prev => {
-                        const next = [...prev]
-                        next[i] = { ...next[i], loaded: true }
-                        return next
-                      })}
-                      onError={() => setImgStates(prev => {
-                        const next = [...prev]
-                        next[i] = { ...next[i], failed: true }
-                        return next
-                      })}
-                    />
-                  )}
-                  {(!imgStates[i]?.loaded || imgStates[i]?.failed) && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
-                        <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            {photos.length > 1 && (
-              <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
-                <span className="text-white text-xs font-medium">{activeIdx + 1} / {photos.length}</span>
+    <PhotoOverlayBase
+      user={user}
+      onClose={onClose}
+      renderFooter={(u) => (
+        <div className="w-full px-4 pb-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white font-bold text-lg">{u.age ? `${u.name}, ${u.age}` : u.name}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <MapPin className="w-3.5 h-3.5 text-[#FF6B35]" />
+                <span className="text-[#8E8E93] text-xs">{formatDist(u.distance ?? 0)}</span>
+                {isUserActive(u) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
               </div>
-            )}
-          </>
-        ) : (
-          <div className="w-full flex items-center justify-center">
-            <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
-              <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
             </div>
+            {!u.isOwn && ownProfile.seekingToday !== 'Just Browsing' && u.seekingToday !== 'Just Browsing' && (
+              <button onClick={() => onMessage(u as UserProfile)} className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
+                <MessageCircle className="w-4 h-4" />
+                {u.openToMessages ? '⭐ ' + t(lang, 'message') : t(lang, 'message')}
+              </button>
+            )}
           </div>
-        )}
-      </div>
-
-      {photos.length > 1 && (
-        <div className="flex justify-center gap-1.5 pb-3">
-          {photos.map((_, i) => <div key={i} className={`h-1.5 rounded-full transition-all duration-200 ${i === activeIdx ? 'w-4 bg-[#FF6B35]' : 'w-1.5 bg-[#8E8E93]/40'}`} />)}
+          <div className="flex gap-3 mt-3 text-xs">
+            <span className="text-[#8E8E93]">{u.height}cm</span>
+            <span className="text-[#8E8E93]">{u.weight}kg</span>
+            <span className={`font-bold ${u.gender === 'Male' ? 'text-blue-400' : 'text-pink-400'}`}>{u.gender}</span>
+            <span className="text-[#8E8E93]">→ {u.seekingGender}</span>
+            {u.dob && <span className="text-purple-400 font-bold">{getZodiacEmoji(getZodiac(u.dob))} {getZodiac(u.dob)}</span>}
+            {u.seekingToday && <span className="text-green-400 font-bold">{u.seekingToday}</span>}
+            {u.meetupType && <span className="text-cyan-400 font-bold">{u.meetupType}</span>}
+            {u.openToMessages && <span className="font-bold text-yellow-400">⭐ {t(lang, 'message')}</span>}
+          </div>
         </div>
       )}
-
-      <div className="w-full px-4 pb-4 pt-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-white font-bold text-lg">{user.age ? `${user.name}, ${user.age}` : user.name}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <MapPin className="w-3.5 h-3.5 text-[#FF6B35]" />
-              <span className="text-[#8E8E93] text-xs">{formatDist(user.distance)}</span>
-              {isUserActive(user) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
-            </div>
-          </div>
-          {!user.isOwn && ownProfile.seekingToday !== 'Just Browsing' && user.seekingToday !== 'Just Browsing' && (
-            <button onClick={() => onMessage(user)} className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
-              <MessageCircle className="w-4 h-4" />
-              {user.openToMessages ? '⭐ ' + t(lang, 'message') : t(lang, 'message')}
-            </button>
-          )}
-        </div>
-        <div className="flex gap-3 mt-3 text-xs">
-          <span className="text-[#8E8E93]">{user.height}cm</span>
-          <span className="text-[#8E8E93]">{user.weight}kg</span>
-          <span className={`font-bold ${user.gender === 'Male' ? 'text-blue-400' : 'text-pink-400'}`}>{user.gender}</span>
-          <span className="text-[#8E8E93]">→ {user.seekingGender}</span>
-          {user.dob && <span className="text-purple-400 font-bold">{getZodiacEmoji(getZodiac(user.dob))} {getZodiac(user.dob)}</span>}
-          {user.seekingToday && <span className="text-green-400 font-bold">{user.seekingToday}</span>}
-          {user.meetupType && <span className="text-cyan-400 font-bold">{user.meetupType}</span>}
-          {user.openToMessages && <span className="font-bold text-yellow-400">⭐ {t(lang, 'message')}</span>}
-        </div>
-      </div>
-    </div>
+    />
   )
 }
 

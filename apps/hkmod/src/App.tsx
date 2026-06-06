@@ -8,14 +8,13 @@ import {
   ArrowLeft,
   Check,
   MapPin,
-  X,
   MessageCircle,
   AlertTriangle,
   Lock,
   RefreshCw,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
-import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid } from 'dating-ui'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid, PhotoOverlay as PhotoOverlayBase } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -284,113 +283,42 @@ function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
 // ─── Photo Overlay ────────────────────────────────────────────────────
 
 function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; onClose: () => void; onMessage: (u: UserProfile) => void; lang: Lang }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [activeIdx, setActiveIdx] = useState(0)
-  const [imgStates, setImgStates] = useState<{ loaded: boolean; failed: boolean }[]>([])
-  const photos = user.tgPhotos?.length ? user.tgPhotos : (user.tgPhotoUrl ? [user.tgPhotoUrl] : [])
   const role = formatRole(user.position, user.isSide)
-
-  // Initialize image states when photos change
-  useEffect(() => {
-    setImgStates(photos.map(() => ({ loaded: false, failed: false })))
-  }, [photos.join(',')])
-
-  const handleScroll = () => {
-    if (!scrollRef.current) return
-    setActiveIdx(Math.round(scrollRef.current.scrollLeft / scrollRef.current.clientWidth))
-  }
-
   return (
-    <div className="fixed top-0 left-0 right-0 bottom-0 z-[60] bg-black/95 flex flex-col animate-in fade-in duration-200" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-[#1A1A1A]/80 flex items-center justify-center z-20 nav-press">
-        <X className="w-5 h-5 text-white" />
-      </button>
-
-      <div className="flex-1 flex items-center relative">
-        {photos.length > 0 ? (
-          <>
-            <div ref={scrollRef} onScroll={handleScroll} className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
-              {photos.map((photo, i) => (
-                <div key={i} className="w-full h-full flex-shrink-0 snap-center flex items-center justify-center relative">
-                  {!imgStates[i]?.failed && (
-                    <img
-                      src={photo}
-                      alt={`${user.name} ${i + 1}`}
-                      className={`max-w-full max-h-[65vh] object-contain transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}`}
-                      draggable={false}
-                      referrerPolicy="no-referrer"
-                      onLoad={() => setImgStates(prev => {
-                        const next = [...prev]
-                        next[i] = { ...next[i], loaded: true }
-                        return next
-                      })}
-                      onError={() => setImgStates(prev => {
-                        const next = [...prev]
-                        next[i] = { ...next[i], failed: true }
-                        return next
-                      })}
-                    />
-                  )}
-                  {(!imgStates[i]?.loaded || imgStates[i]?.failed) && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
-                        <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            {photos.length > 1 && (
-              <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-full">
-                <span className="text-white text-xs font-medium">{activeIdx + 1} / {photos.length}</span>
+    <PhotoOverlayBase
+      user={user}
+      onClose={onClose}
+      renderFooter={(u) => (
+        <div className="w-full px-4 pb-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white font-bold text-lg">{u.age ? `${u.name}, ${u.age}` : u.name}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <MapPin className="w-3.5 h-3.5 text-[#FF6B35]" />
+                <span className="text-[#8E8E93] text-xs">{formatDist(u.distance ?? 0)}</span>
+                {isUserActive(u) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
               </div>
-            )}
-          </>
-        ) : (
-          <div className="w-full flex items-center justify-center">
-            <div className="w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center">
-              <span className="text-4xl font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
             </div>
+            {!u.isOwn && (
+              <button onClick={() => onMessage(u as UserProfile)} className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
+                <MessageCircle className="w-4 h-4" />
+                {u.openToMessages ? '⭐ ' + t(lang, 'message') : t(lang, 'message')}
+              </button>
+            )}
           </div>
-        )}
-      </div>
-
-      {photos.length > 1 && (
-        <div className="flex justify-center gap-1.5 pb-3">
-          {photos.map((_, i) => <div key={i} className={`h-1.5 rounded-full transition-all duration-200 ${i === activeIdx ? 'w-4 bg-[#FF6B35]' : 'w-1.5 bg-[#8E8E93]/40'}`} />)}
+          <div className="flex gap-3 mt-3 text-xs">
+            <span className="text-[#8E8E93]">{u.height}cm</span>
+            <span className="text-[#8E8E93]">{u.weight}kg</span>
+            <span className="text-[#FF6B35] font-bold">{role}</span>
+            {u.preference1 && <span className={`font-bold ${u.preference1 === 'Safe' ? 'text-green-400' : 'text-red-400'}`}>{u.preference1}</span>}
+            {u.preference2 && <span className={`font-bold ${u.preference2 === 'Clean' ? 'text-blue-400' : 'text-purple-400'}`}>{u.preference2}</span>}
+            {u.preference3 && <span className={`font-bold ${u.preference3 === '1on1' ? 'text-yellow-400' : 'text-orange-400'}`}>{u.preference3}</span>}
+            {u.preference4 && <span className={`font-bold ${u.preference4 === 'Host' ? 'text-indigo-400' : u.preference4 === 'Travel' ? 'text-cyan-400' : u.preference4 === 'Outdoor' ? 'text-lime-400' : 'text-amber-400'}`}>{u.preference4}</span>}
+            {u.openToMessages && <span className="font-bold text-yellow-400">⭐ {t(lang, 'message')}</span>}
+          </div>
         </div>
       )}
-
-      <div className="w-full px-4 pb-4 pt-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-white font-bold text-lg">{user.age ? `${user.name}, ${user.age}` : user.name}</p>
-            <div className="flex items-center gap-2 mt-0.5">
-              <MapPin className="w-3.5 h-3.5 text-[#FF6B35]" />
-              <span className="text-[#8E8E93] text-xs">{formatDist(user.distance ?? 0)}</span>
-              {isUserActive(user) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
-            </div>
-          </div>
-          {!user.isOwn && (
-            <button onClick={() => onMessage(user)} className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
-              <MessageCircle className="w-4 h-4" />
-              {user.openToMessages ? '⭐ ' + t(lang, 'message') : t(lang, 'message')}
-            </button>
-          )}
-        </div>
-        <div className="flex gap-3 mt-3 text-xs">
-          <span className="text-[#8E8E93]">{user.height}cm</span>
-          <span className="text-[#8E8E93]">{user.weight}kg</span>
-          <span className="text-[#FF6B35] font-bold">{role}</span>
-          {user.preference1 && <span className={`font-bold ${user.preference1 === 'Safe' ? 'text-green-400' : 'text-red-400'}`}>{user.preference1}</span>}
-          {user.preference2 && <span className={`font-bold ${user.preference2 === 'Clean' ? 'text-blue-400' : 'text-purple-400'}`}>{user.preference2}</span>}
-          {user.preference3 && <span className={`font-bold ${user.preference3 === '1on1' ? 'text-yellow-400' : 'text-orange-400'}`}>{user.preference3}</span>}
-          {user.preference4 && <span className={`font-bold ${user.preference4 === 'Host' ? 'text-indigo-400' : user.preference4 === 'Travel' ? 'text-cyan-400' : user.preference4 === 'Outdoor' ? 'text-lime-400' : 'text-amber-400'}`}>{user.preference4}</span>}
-          {user.openToMessages && <span className="font-bold text-yellow-400">⭐ {t(lang, 'message')}</span>}
-        </div>
-      </div>
-    </div>
+    />
   )
 }
 

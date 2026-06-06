@@ -1,3 +1,4 @@
+export * from './PhotoOverlay'
 export * from './LocationGate'
 export * from './FlyingMessagesOverlay'
 export * from './BottomNav'
