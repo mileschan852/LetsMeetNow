@@ -80,7 +80,7 @@ function GridTile({
   return (
     <button
       onClick={onClick}
-      className={`card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left relative ${tileClassName || ''}`}
+      className={`card-enter tile-aspect w-full h-full rounded-lg overflow-hidden nav-press text-left relative ${tileClassName || ''}`}
       style={{ minHeight: '68px' }}
     >
       {/* Invisible eye icon */}

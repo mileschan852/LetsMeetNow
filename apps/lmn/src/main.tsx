@@ -39,12 +39,9 @@ try {
       <App />
     </StrictMode>,
   )
-  // React mounted — update fallback
+  // React mounted — hide fallback
   if (fallback) {
-    fallback.style.background = '#00D4AA'
-    fallback.style.color = '#000'
-    fallback.innerHTML = 'React mounted OK'
-    setTimeout(() => { if (fallback) fallback.style.opacity = '0.3' }, 3000)
+    fallback.style.display = 'none'
   }
 } catch (err) {
   if (fallback) {
