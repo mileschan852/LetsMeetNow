@@ -69,7 +69,7 @@ export interface Raffle {
 }
 
 export interface FlyingMessage {
-  id: string
+  id: number
   text: string
   sender: string
   createdAt: string

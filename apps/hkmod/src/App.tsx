@@ -1,4 +1,4 @@
-import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile, formatRole, getGridRoleLabel, getFilterColor, type RoleFilterMode, useRefreshCooldown, useGridUsers, useNearbyRefresh } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile, formatRole, getGridRoleLabel, getFilterColor, type RoleFilterMode, useRefreshCooldown, useGridUsers, useNearbyRefresh, useHeartbeat, useFlyingMessages } from 'dating-core'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
@@ -1122,8 +1122,7 @@ export default function App() {
   const [raffle, setRaffle] = useState<Raffle | null>(null)
 
   // Flying messages: shared across all users via Supabase
-  const [flyingMessages, setFlyingMessages] = useState<{id: number; text: string; top: string}[]>([])
-  const lastFlyingSendRef = useRef(0) // 1 min cooldown per user
+  const { flyingMessages, setFlyingMessages, lastFlyingSendRef } = useFlyingMessages()
 
 
   // "Show More Users" button → unlock +1 grid row (5 users)
@@ -1651,18 +1650,7 @@ export default function App() {
   }, [ownProfile.lat, ownProfile.lng, ownProfile.name, ownProfile.tgPhotoUrl, ownProfile.height, ownProfile.weight, ownProfile.position, ownProfile.isSide, ownProfile.preference1, ownProfile.preference2, ownProfile.preference3, ownProfile.preference4, ownProfile.openToMessages, ownProfile.tgUsername, ownProfile.dob, ownProfile.hideAge])
 
   // ─── Heartbeat: update timestamp every 30s ────────────────────────
-  useEffect(() => {
-    if (!locationGranted) return
-    const uid = tgUserId.current
-    if (!uid) return
-
-    const ping = () => {
-      setOnlineStatus('users', uid, true).catch(console.error)
-    }
-    ping()
-    const heartbeat = setInterval(ping, 30000)
-    return () => clearInterval(heartbeat)
-  }, [locationGranted])
+  useHeartbeat({ tableName: 'users', getUserId: () => tgUserId.current, locationGranted })
 
   // ─── Refresh nearby users (manual + auto) ─────────────────────────
   // Initialize to -120s so first refresh is allowed immediately
@@ -1680,30 +1668,7 @@ export default function App() {
   }, [ownProfile.lat, ownProfile.lng, handleRefresh])
 
   // ─── Poll flying messages from Supabase (shared across all users) ────
-  useEffect(() => {
-    const poll = () => {
-      const oneMinAgo = new Date(Date.now() - 65000).toISOString()
-      fetchFlyingMessages(oneMinAgo).then(msgs => {
-        if (!msgs.length) return
-        // Deduplicate by Supabase id
-        setFlyingMessages(prev => {
-          const existingIds = new Set(prev.map(p => p.id))
-          const newItems = msgs
-            .filter(m => !existingIds.has(m.id))
-            .map(m => ({
-              id: m.id,
-              text: `@${m.username} said: ${m.text}`,
-              top: `${m.top_percent}vh`,
-            }))
-          if (newItems.length === 0) return prev
-          return [...prev, ...newItems]
-        })
-      })
-    }
-    poll()
-    const interval = setInterval(poll, 8000)
-    return () => clearInterval(interval)
-  }, [])
+  // handled by useFlyingMessages() hook above
 
   // ─── Location granted ──────────────────────────────────────────────
   const handleLocationGranted = useCallback((lat: number, lng: number) => {

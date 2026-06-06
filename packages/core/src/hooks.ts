@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { isUserActive, dbToProfile } from './utils'
-import { fetchNearby } from './supabase'
-import type { UserProfile } from './types'
+import { fetchNearby, setOnlineStatus, fetchFlyingMessages } from './supabase'
+import type { UserProfile, FlyingMessage } from './types'
 
 export interface UseRefreshCooldownOptions {
   cooldownMs?: number
@@ -73,6 +73,66 @@ export function useNearbyRefresh({ tableName, lat, lng, getMyId, isInvisible, in
   }, [tableName, lat, lng])
 
   return { users, setUsers, isLoading, setIsLoading, refresh }
+}
+
+export interface UseHeartbeatOptions {
+  tableName: string
+  getUserId: () => number | null | undefined
+  locationGranted: boolean
+  intervalMs?: number
+}
+
+export function useHeartbeat({ tableName, getUserId, locationGranted, intervalMs = 30000 }: UseHeartbeatOptions) {
+  useEffect(() => {
+    if (!locationGranted) return
+    const uid = getUserId()
+    if (!uid) return
+    const ping = () => setOnlineStatus(tableName, uid, true).catch(console.error)
+    ping()
+    const heartbeat = setInterval(ping, intervalMs)
+    return () => clearInterval(heartbeat)
+  }, [tableName, getUserId, locationGranted, intervalMs])
+}
+
+export interface UseFlyingMessagesOptions {
+  pollIntervalMs?: number
+}
+
+export interface FlyingMessageItem {
+  id: number
+  text: string
+  top: string
+}
+
+export function useFlyingMessages({ pollIntervalMs = 8000 }: UseFlyingMessagesOptions = {}) {
+  const [flyingMessages, setFlyingMessages] = useState<FlyingMessageItem[]>([])
+  const lastFlyingSendRef = useRef(0)
+
+  useEffect(() => {
+    const poll = () => {
+      const oneMinAgo = new Date(Date.now() - 65000).toISOString()
+      fetchFlyingMessages(oneMinAgo).then(msgs => {
+        if (!msgs.length) return
+        setFlyingMessages(prev => {
+          const existingIds = new Set(prev.map(p => p.id))
+          const newItems = msgs
+            .filter(m => !existingIds.has(m.id))
+            .map(m => ({
+              id: m.id,
+              text: `@${m.username} said: ${m.text}`,
+              top: `${m.top_percent}vh`,
+            }))
+          if (newItems.length === 0) return prev
+          return [...prev, ...newItems]
+        })
+      })
+    }
+    poll()
+    const interval = setInterval(poll, pollIntervalMs)
+    return () => clearInterval(interval)
+  }, [pollIntervalMs])
+
+  return { flyingMessages, setFlyingMessages, lastFlyingSendRef }
 }
 
 export interface UseGridUsersOptions {
