@@ -67,10 +67,16 @@ function GridTile({
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
   const photo = user.tgPhotoUrl
+  const imgRef = useRef<HTMLImageElement>(null)
 
   useEffect(() => {
     setImgLoaded(false)
     setImgFailed(false)
+    // Handle cached images: if already complete, fire load manually
+    const img = imgRef.current
+    if (img && img.complete && img.naturalWidth > 0) {
+      setImgLoaded(true)
+    }
   }, [photo])
 
   const isActive = user.isOnline && user.updatedAt
@@ -96,6 +102,7 @@ function GridTile({
       {/* Photo */}
       {photo && !imgFailed && (
         <img
+          ref={imgRef}
           src={photo}
           alt={user.name}
           className={`absolute inset-0 w-full h-full object-cover z-10 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
