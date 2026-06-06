@@ -15,6 +15,15 @@ export interface GridUser {
   distance: number
   openToMessages?: boolean
   // App-specific fields (passed through)
+  age: number
+  height: number
+  weight: number
+  dob?: string | null
+  hasPhoto?: boolean
+  gender?: string
+  seekingGender?: string
+  role?: string
+  tgUsername?: string
   [key: string]: any
 }
 
@@ -26,7 +35,7 @@ export interface ProfileGridProps {
   hasMoreUsers: boolean
   onPromptUnlock: () => void
   onViewOwnProfile: () => void
-  onViewPhoto: (user: GridUser) => void
+  onViewPhoto: (user: any) => void
   isAdmin: boolean
   isLoading: boolean
   // Render props for app-specific tile bottom content
@@ -36,6 +45,8 @@ export interface ProfileGridProps {
   renderTileTopLeft?: (user: GridUser) => React.ReactNode
   // Optional: custom tile className
   tileClassName?: string
+  // Optional: matching user IDs for dimming non-matching users
+  matchingIds?: Set<string>
 }
 
 // ─── Profile Tile ────────────────────────────────────────────────────
@@ -156,6 +167,7 @@ export function ProfileGrid({
   renderTileLabel,
   renderTileTopLeft,
   tileClassName,
+  matchingIds,
 }: ProfileGridProps) {
   // Build display list: own profile first, then other users, then blank tiles to fill
   const displayUsers: GridUser[] = [ownProfile, ...users.filter((u) => u.id !== ownProfile.id)]
@@ -166,6 +178,9 @@ export function ProfileGrid({
       id: `blank_${displayUsers.length}`,
       name: '',
       distance: 0,
+      age: 0,
+      height: 0,
+      weight: 0,
       isBlank: true,
     } as GridUser)
   }
@@ -225,7 +240,7 @@ export function ProfileGrid({
               className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200"
               style={{
                 borderColor: user.id === ownProfile.id ? '#FF6B35' : 'transparent',
-                opacity: !isAboveDivider ? 0.3 : 1,
+                opacity: !isAboveDivider ? 0.3 : matchingIds && !matchingIds.has(user.id) ? 0.25 : 1,
                 pointerEvents: !isAboveDivider ? 'none' : undefined,
               }}
             >

@@ -1,5 +1,5 @@
 import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock } from 'dating-core'
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
 import logoAnim from './assets/hkmod-logo-animated.mp4'
@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
-import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton } from 'dating-ui'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -469,72 +469,6 @@ function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock
   )
 }
 
-// ─── Profile Grid Tile ───────────────────────────────────────────────
-
-function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => void }) {
-  const [imgLoaded, setImgLoaded] = useState(false)
-  const [imgFailed, setImgFailed] = useState(false)
-  const photo = user.tgPhotoUrl
-  const roleLabel = getGridRoleLabel(user.position, user.isSide)
-
-  // Reset photo state when photo URL changes
-  useEffect(() => {
-    setImgLoaded(false)
-    setImgFailed(false)
-  }, [photo])
-
-  return (
-    <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
-      {/* Invisible eye icon — shown on own profile when invisible, or admin sees on all invisible users */}
-      {user.isInvisible && (
-        <div className="absolute top-0.5 left-0.5 z-40 w-3 h-3 flex items-center justify-center rounded-full bg-purple-500/40 border border-purple-400/30 text-[7px]" title="Invisible">
-          👁️‍🗨️
-        </div>
-      )}
-      {/* Photo */}
-      {photo && !imgFailed && (
-        <img
-          src={photo}
-          alt={user.name}
-          className={`absolute inset-0 w-full h-full object-cover z-10 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-          style={{ transition: 'opacity 0.3s' }}
-          onLoad={() => setImgLoaded(true)}
-          onError={() => setImgFailed(true)}
-          loading="eager"
-          referrerPolicy="no-referrer"
-          draggable={false}
-        />
-      )}
-      {/* Placeholder shown while loading or if no photo/error */}
-      {(!photo || imgFailed || !imgLoaded) && (
-        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-10">
-          <span className="text-lg font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
-        </div>
-      )}
-      <div className="absolute inset-0 profile-photo-gradient pointer-events-none z-20" />
-      {isUserActive(user) && (
-        <div className="absolute top-0.5 right-0.5 w-2 h-2 bg-[#00D4AA] rounded-full online-pulse z-30" />
-      )}
-      {user.openToMessages && (
-        <div className="absolute top-0.5 left-0.5 z-30 text-[8px] bg-black/50 rounded-full w-4 h-4 flex items-center justify-center">⭐</div>
-      )}
-      {user.isOwn && (
-        <div className="absolute inset-0 border-2 border-[#FF6B35] rounded-lg pointer-events-none z-30" />
-      )}
-      <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] pointer-events-none z-30 flex flex-col justify-end">
-        <p className={`font-semibold text-[8px] leading-tight truncate ${user.isOwn ? 'text-[#FF6B35]' : 'text-white'}`}>
-          {user.isOwn ? 'You' : user.name}
-        </p>
-        <div className="flex items-center justify-between">
-          <p className="text-[#FF6B35] text-[7px] font-medium">{formatDist(user.distance)}</p>
-          {!user.isOwn && <p className="text-[#8E8E93] text-[6px]">{getTimeAgo(user.updatedAt)}</p>}
-          <p className="text-[#8E8E93] text-[6px] font-bold">{roleLabel}</p>
-        </div>
-      </div>
-    </button>
-  )
-}
-
 // ─── Main Screen ──────────────────────────────────────────────────────
 
 function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
@@ -788,7 +722,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
-        <span className="ml-1 text-[#5AC8FA]">v17.1H</span>
       </div>
 
       {showDbWarning && (
@@ -898,79 +831,39 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
           const unlockedSlots = effectiveRows * 5
           const totalRealUsers = sortedUsers.length
           const hasMoreUsers = totalRealUsers > unlockedSlots
-          
-          // Show all real users + pad to 100 with blanks
-          const displayUsers = sortedUsers.slice(0, 100)
-          while (displayUsers.length < 100) {
-            displayUsers.push({ id: `blank_${displayUsers.length}`, isBlank: true } as any)
-          }
-
           return (
             <>
-              {/* Main grid — all 100 slots, unlocked rows normal, locked rows greyed */}
-              <div className="grid grid-cols-5 gap-1.5">
-                {displayUsers.map((user, idx) => {
-                  const isAboveDivider = idx < unlockedSlots
-                  const isBlank = !!(user as any).isBlank
-                  const isMatching = !isBlank && matchingIds.has(user.id)
-                  
-                  if (isBlank) {
-                    return (
-                      <div
-                        key={(user as any).id}
-                        className="relative aspect-square rounded-lg bg-[#2C2C2E]/60 border border-[#3A3A3C]/40 flex items-center justify-center"
-                        style={{ pointerEvents: 'none' }}
-                      >
-                        <Users className="w-4 h-4 text-[#48484A]" />
-                      </div>
-                    )
-                  }
-                  
+              <ProfileGrid
+                users={sortedUsers.filter(u => u.id !== ownProfile.id)}
+                ownProfile={{...ownProfile, isOwn: true}}
+                unlockedSlots={unlockedSlots}
+                totalRealUsers={totalRealUsers}
+                hasMoreUsers={hasMoreUsers}
+                onPromptUnlock={onPromptUnlock}
+                onViewOwnProfile={onViewOwnProfile}
+                onViewPhoto={onViewPhoto}
+                isAdmin={isAdmin}
+                isLoading={isLoadingUsers && users.length === 0}
+                matchingIds={matchingIds}
+                renderTileBottom={(user) => {
+                  const roleLabel = getGridRoleLabel(user.position, user.isSide)
                   return (
-                    <React.Fragment key={user.id}>
-              {/* Divider row — tap to unlock +1 row */}
-                      {idx === unlockedSlots && hasMoreUsers && (
-                        <div
-                          className="col-span-full flex items-center justify-center py-2 my-1 cursor-pointer select-none active:opacity-60 transition-opacity rounded-lg bg-gradient-to-r from-[#FF6B35]/10 to-purple-600/10 border border-[#FF6B35]/30"
-                          onClick={onPromptUnlock}
-                        >
-                          <span className="text-[10px] text-[#FF6B35] font-bold mr-2">🔒</span>
-                          <span className="text-[10px] text-[#FF6B35] font-semibold">
-                            {isAdmin ? 'Tap to unlock row (admin)' : 'Tap to unlock — 1000 ⭐'}
-                          </span>
-                          <span className="text-[9px] text-[#8E8E93] ml-2">({totalRealUsers - unlockedSlots} more)</span>
-                          <span className="mx-2 text-[10px] text-[#FF6B35] font-bold">🔒</span>
-                        </div>
-                      )}
-                      <div
-                        className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200"
-                        style={{
-                          borderColor: user.id === ownProfile.id ? '#FF6B35' : 'transparent',
-                          opacity: !isAboveDivider ? 0.3 : !isMatching ? 0.25 : 1,
-                          pointerEvents: !isAboveDivider ? 'none' : undefined,
-                        }}
-                      >
-                        <ProfileTile
-                          user={user}
-                          onClick={!isAboveDivider ? undefined : () => user.isOwn ? onViewOwnProfile() : onViewPhoto(user)}
-                        />
-                      </div>
-                    </React.Fragment>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[#FF6B35] text-[7px] font-medium">{formatDist(user.distance)}</p>
+                      {!user.isOwn && <p className="text-[#8E8E93] text-[6px]">{getTimeAgo(user.updatedAt)}</p>}
+                      <p className="text-[6px] font-bold text-[#8E8E93]">{roleLabel}</p>
+                    </div>
                   )
-                })}
-              </div>
-              
-              {/* Divider acts as unlock button — no separate button needed */}
-              
-              {/* Refresh button when all real users are unlocked */}
+                }}
+              />
               {!hasMoreUsers && (
                 <div className="mt-1.5 mx-0.5 select-none">
                   <button
-                    className={`w-full rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all ${
+                    className={"w-full rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all " + (
                       Date.now() - lastRefreshTime >= 5 * 60 * 1000
-                        ? 'bg-[#1A1A1A] border border-[#5AC8FA] text-[#5AC8FA] cursor-pointer active:scale-[0.98]'
-                        : 'bg-[#1A1A1A]/60 border border-[#2C2C2E] text-[#8E8E93] cursor-not-allowed'
-                    }`}
+                        ? "bg-[#1A1A1A] border border-[#5AC8FA] text-[#5AC8FA] cursor-pointer active:scale-[0.98]"
+                        : "bg-[#1A1A1A]/60 border border-[#2C2C2E] text-[#8E8E93] cursor-not-allowed"
+                    )}
                     onClick={() => {
                       if (Date.now() - lastRefreshTime >= 5 * 60 * 1000) {
                         setLastRefreshTime(Date.now());
