@@ -1,5 +1,5 @@
 import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto } from 'dating-core'
-import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid } from 'dating-ui'
+import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid, LocationGate, FlyingMessagesOverlay, UnlockTipCycle, UnlockTip } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 import logoImg from './assets/lmn-logo.svg'
@@ -389,132 +389,61 @@ function PhotoOverlay({ user, onClose, onMessage, lang, ownProfile }: { user: Us
 
 // ─── Location Gate ────────────────────────────────────────────────────
 
-function LocationGate({ onGranted, lang }: { onGranted: (lat: number, lng: number) => void; lang: Lang }) {
-  const [status, setStatus] = useState<'checking' | 'needed' | 'requesting' | 'denied'>('checking')
-
-  const requestLocation = () => {
-    setStatus('requesting')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { onGranted(pos.coords.latitude, pos.coords.longitude) },
-      () => { setStatus('denied') },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    )
-  }
-
-  useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => onGranted(pos.coords.latitude, pos.coords.longitude),
-      () => setStatus('needed'),
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 }
-    )
-  }, [onGranted])
-
-  if (status === 'checking') {
-    return (
-      <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-        <LocateFixed className="w-12 h-12 text-[#FF6B35] animate-pulse mb-4" />
-        <p className="text-white font-semibold">{t(lang, 'checkingLoc')}</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="fixed top-0 left-0 right-0 bottom-0 z-[70] bg-[#0A0A0A] flex flex-col items-center justify-center px-6" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      <div className="w-16 h-16 rounded-full bg-[#FF6B35]/10 flex items-center justify-center mb-4">
-        <LocateFixed className="w-8 h-8 text-[#FF6B35]" />
-      </div>
-      <h2 className="text-xl font-bold text-white mb-2">{t('en', 'locationRequired')}</h2>
-      <p className="text-[#8E8E93] text-sm text-center mb-6">
-        {t(lang, 'locationDesc')}
-      </p>
-      {status === 'denied' && (
-        <div className="bg-[#1A1A1A] border border-[#2C2C2E] rounded-xl p-4 mb-4 w-full max-w-sm">
-          <p className="text-[#FF6B35] text-sm font-semibold mb-1">{t(lang, 'permissionDenied')}</p>
-          <p className="text-[#8E8E93] text-xs">{t(lang, 'enableLocation')}</p>
-        </div>
-      )}
-      <button onClick={requestLocation} disabled={status === 'requesting'} className="w-full max-w-sm h-12 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center justify-center gap-2">
-        <LocateFixed className="w-4 h-4" />
-        {status === 'requesting' ? t(lang, 'checkingLoc') : t(lang, 'tapToRetry')}
-      </button>
-      <button onClick={() => onGranted(22.3193, 114.1694)} className="mt-3 text-[#8E8E93] text-xs underline">
-        Continue without location
-      </button>
-    </div>
-  )
-}
-
 // ─── Unlock Tip Cycle — cycles through ways to unlock more rows ──────
 
-function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
-  const [idx, setIdx] = useState(0)
-  const tips: Record<Lang, string[]> = {
+function UnlockTipCycleLMN({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
+  const tips: UnlockTip[] = ({
     en: [
-      `Base: 2 rows free`,
-      isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)`,
-      `Purchased: ${gridRowsUnlocked} rows`,
-      `Add a Telegram photo +1`,
-      `Boost LMN Channel +1~4`,
-      `⭐ = charge stars per message`,
-      channelFollowUnlock ? `Group: +1 row ✅` : `Join LMN Channel +1`,
-      `Buy rows with ⭐ Stars`,
+      { text: `Base: 2 rows free` },
+      { text: isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)` },
+      { text: `Purchased: ${gridRowsUnlocked} rows` },
+      { text: `Add a Telegram photo +1` },
+      { text: `Boost LMN Channel +1~4` },
+      { text: `⭐ = charge stars per message` },
+      { text: channelFollowUnlock ? `Group: +1 row ✅` : `Join LMN Channel +1`, isAction: true, actionId: 'channel' },
+      { text: `Buy rows with ⭐ Stars` },
     ],
     tc: [
-      `基礎: 2 行免費`,
-      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
-      `已購: ${gridRowsUnlocked} 行`,
-      `加入 Telegram 頭像 +1`,
-      `Boost LMN Channel +1~4`,
-      `⭐ = 按訊息收費`,
-      channelFollowUnlock ? `群組: +1 行 ✅` : `加入 LMN Channel +1`,
-      `用 ⭐ 星星購買行數`,
+      { text: `基礎: 2 行免費` },
+      { text: isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)` },
+      { text: `已購: ${gridRowsUnlocked} 行` },
+      { text: `加入 Telegram 頭像 +1` },
+      { text: `Boost LMN Channel +1~4` },
+      { text: `⭐ = 按訊息收費` },
+      { text: channelFollowUnlock ? `群組: +1 行 ✅` : `加入 LMN Channel +1`, isAction: true, actionId: 'channel' },
+      { text: `用 ⭐ 星星購買行數` },
     ],
     sc: [
-      `基础: 2 行免费`,
-      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
-      `已购: ${gridRowsUnlocked} 行`,
-      `加入 Telegram 头像 +1`,
-      `Boost LMN Channel +1~4`,
-      `⭐ = 按消息收费`,
-      channelFollowUnlock ? `群组: +1 行 ✅` : `加入 LMN Channel +1`,
-      `用 ⭐ 星星购买行数`,
+      { text: `基础: 2 行免费` },
+      { text: isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)` },
+      { text: `已购: ${gridRowsUnlocked} 行` },
+      { text: `加入 Telegram 头像 +1` },
+      { text: `Boost LMN Channel +1~4` },
+      { text: `⭐ = 按消息收费` },
+      { text: channelFollowUnlock ? `群组: +1 行 ✅` : `加入 LMN Channel +1`, isAction: true, actionId: 'channel' },
+      { text: `用 ⭐ 星星购买行数` },
     ],
     ru: [
-      `База: 2 строки бесплатно`,
-      isPremium ? `Premium: +1 строка` : `Premium: +1 строка (не активен)`,
-      `Куплено: ${gridRowsUnlocked} строк`,
-      `Добавь фото в Telegram +1`,
-      `Boost LMN Channel +1~4`,
-      `⭐ = плата за сообщение`,
-      channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в LMN Channel +1`,
-      `Купить строки за ⭐`,
+      { text: `База: 2 строки бесплатно` },
+      { text: isPremium ? `Premium: +1 строка` : `Premium: +1 строка (не активен)` },
+      { text: `Куплено: ${gridRowsUnlocked} строк` },
+      { text: `Добавь фото в Telegram +1` },
+      { text: `Boost LMN Channel +1~4` },
+      { text: `⭐ = плата за сообщение` },
+      { text: channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в LMN Channel +1`, isAction: true, actionId: 'channel' },
+      { text: `Купить строки за ⭐` },
     ],
-  }
-  const list = tips[lang] || tips.en
-
-  // Auto-rotate every 5 seconds
-  useEffect(() => {
-    const i = setInterval(() => setIdx(i => (i + 1) % list.length), 5000)
-    return () => clearInterval(i)
-  }, [list.length])
-
-  const current = list[idx % list.length]
-  const isChannelTip = idx % list.length === 6
+  })[lang] || []
 
   return (
-    <button
-      onClick={() => {
-        if (isChannelTip && !channelFollowUnlock) {
-          onClaimChannelFollow()
-        } else {
-          setIdx((i) => i + 1)
-        }
+    <UnlockTipCycle
+      tips={tips}
+      intervalMs={5000}
+      onActionTip={(tip) => {
+        if (tip.actionId === 'channel') onClaimChannelFollow()
       }}
       className="ml-auto flex items-center gap-1 text-[9px] text-[#8E8E93] nav-press"
-    >
-      <span className="w-4 h-4 rounded-full bg-[#2C2C2E] flex items-center justify-center">💡</span>
-      <span className={`truncate max-w-[140px] ${isChannelTip && !channelFollowUnlock ? 'text-[#5AC8FA]' : ''}`}>{current}</span>
-    </button>
+    />
   )
 }
 
@@ -715,7 +644,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <span className="text-[#2C2C2E]">|</span>
         <span className="text-[#5AC8FA]">v17.3L</span>
         <span className="text-[#2C2C2E]">|</span>
-        <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
+        <UnlockTipCycleLMN lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
       </div>
 
       {showDbWarning && (
@@ -1089,27 +1018,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
 
 // ─── Flying Messages Overlay ─────────────────────────────────────────
 
-function FlyingMessagesOverlay({ messages, onDone }: { messages: {id: number; text: string; top: string}[]; onDone: (id: number) => void }) {
-  useEffect(() => {
-    messages.forEach(m => {
-      setTimeout(() => onDone(m.id), 60000) // remove after 60s
-    })
-  }, [messages, onDone])
-
-  return (
-    <div className="fixed inset-0 z-[90] pointer-events-none overflow-hidden" aria-hidden="true">
-      {messages.map(m => (
-        <div
-          key={m.id}
-          className="flying-message absolute whitespace-nowrap text-sm font-bold text-white/90 drop-shadow-lg"
-          style={{ top: m.top }}
-        >
-          {m.text}
-        </div>
-      ))}
-    </div>
-  )
-}
+// ─── Flying Messages — handled by dating-ui —────────────────────────
 
 // ─── Bottom Nav ──────────────────────────────────────────────────────
 

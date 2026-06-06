@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
-import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid, PhotoOverlay as PhotoOverlayBase } from 'dating-ui'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid, PhotoOverlay as PhotoOverlayBase, UnlockTipCycle, type UnlockTip } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -324,75 +324,59 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
 
 // ─── Unlock Tip Cycle — cycles through ways to unlock more rows ──────
 
-function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
-  const [idx, setIdx] = useState(0)
-  const tips = {
+function UnlockTipCycleHKMOD({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
+  const tips: UnlockTip[] = ({
     en: [
-      `Base: 2 rows free`,
-      isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)`,
-      `Purchased: ${gridRowsUnlocked} rows`,
-      `Add a Telegram photo +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
-      `⭐ = charge stars per message`,
-      channelFollowUnlock ? `Group: +1 row ✅` : `Join @HKMembersOnlyChat +1`,
-      `Buy rows with ⭐ Stars`,
+      { text: `Base: 2 rows free` },
+      { text: isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)` },
+      { text: `Purchased: ${gridRowsUnlocked} rows` },
+      { text: `Add a Telegram photo +1` },
+      { text: `Boost @HKMembersOnlyChat +1~4` },
+      { text: `⭐ = charge stars per message` },
+      { text: channelFollowUnlock ? `Group: +1 row ✅` : `Join @HKMembersOnlyChat +1`, isAction: true, actionId: 'channel' },
+      { text: `Buy rows with ⭐ Stars` },
     ],
     tc: [
-      `基礎: 2 行免費`,
-      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
-      `已購: ${gridRowsUnlocked} 行`,
-      `加入 Telegram 頭像 +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
-      `⭐ = 按訊息收費`,
-      channelFollowUnlock ? `群組: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`,
-      `用 ⭐ 星星購買行數`,
+      { text: `基礎: 2 行免費` },
+      { text: isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)` },
+      { text: `已購: ${gridRowsUnlocked} 行` },
+      { text: `加入 Telegram 頭像 +1` },
+      { text: `Boost @HKMembersOnlyChat +1~4` },
+      { text: `⭐ = 按訊息收費` },
+      { text: channelFollowUnlock ? `群組: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`, isAction: true, actionId: 'channel' },
+      { text: `用 ⭐ 星星購買行數` },
     ],
     sc: [
-      `基础: 2 行免费`,
-      isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)`,
-      `已购: ${gridRowsUnlocked} 行`,
-      `加入 Telegram 头像 +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
-      `⭐ = 按消息收费`,
-      channelFollowUnlock ? `群组: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`,
-      `用 ⭐ 星星购买行数`,
+      { text: `基础: 2 行免费` },
+      { text: isPremium ? `Premium: +1 行` : `Premium: +1 行 (未激活)` },
+      { text: `已购: ${gridRowsUnlocked} 行` },
+      { text: `加入 Telegram 头像 +1` },
+      { text: `Boost @HKMembersOnlyChat +1~4` },
+      { text: `⭐ = 按消息收费` },
+      { text: channelFollowUnlock ? `群组: +1 行 ✅` : `加入 @HKMembersOnlyChat +1`, isAction: true, actionId: 'channel' },
+      { text: `用 ⭐ 星星购买行数` },
     ],
     ru: [
-      `База: 2 строки бесплатно`,
-      isPremium ? `Premium: +1 строка` : `Premium: +1 строка (не активен)`,
-      `Куплено: ${gridRowsUnlocked} строк`,
-      `Добавь фото в Telegram +1`,
-      `Boost @HKMembersOnlyChat +1~4`,
-      `⭐ = плата за сообщение`,
-      channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в @HKMembersOnlyChat +1`,
-      `Купить строки за ⭐`,
+      { text: `База: 2 строки бесплатно` },
+      { text: isPremium ? `Premium: +1 строка` : `Premium: +1 строка (не активен)` },
+      { text: `Куплено: ${gridRowsUnlocked} строк` },
+      { text: `Добавь фото в Telegram +1` },
+      { text: `Boost @HKMembersOnlyChat +1~4` },
+      { text: `⭐ = плата за сообщение` },
+      { text: channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в @HKMembersOnlyChat +1`, isAction: true, actionId: 'channel' },
+      { text: `Купить строки за ⭐` },
     ],
-  }
-  const list = tips[lang] || tips.en
-
-  // Auto-rotate every 5 seconds
-  useEffect(() => {
-    const i = setInterval(() => setIdx(i => (i + 1) % list.length), 5000)
-    return () => clearInterval(i)
-  }, [list.length])
-
-  const current = list[idx % list.length]
-  const isChannelTip = idx % list.length === 6
+  })[lang] || []
 
   return (
-    <button
-      onClick={() => {
-        if (isChannelTip && !channelFollowUnlock) {
-          onClaimChannelFollow()
-        } else {
-          setIdx((i) => i + 1)
-        }
+    <UnlockTipCycle
+      tips={tips}
+      intervalMs={5000}
+      onActionTip={(tip) => {
+        if (tip.actionId === 'channel') onClaimChannelFollow()
       }}
       className="ml-auto flex items-center gap-1 text-[9px] text-[#8E8E93] nav-press"
-    >
-      <span className="w-4 h-4 rounded-full bg-[#2C2C2E] flex items-center justify-center">💡</span>
-      <span className={`truncate max-w-[140px] ${isChannelTip && !channelFollowUnlock ? 'text-[#5AC8FA]' : ''}`}>{current}</span>
-    </button>
+    />
   )
 }
 
@@ -650,7 +634,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <span className="text-[#2C2C2E]">|</span>
         <span className="text-[#5AC8FA]">v17.2H</span>
         <span className="text-[#2C2C2E]">|</span>
-        <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
+        <UnlockTipCycleHKMOD lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
       </div>
 
       {showDbWarning && (
