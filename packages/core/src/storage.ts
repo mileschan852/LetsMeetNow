@@ -1,4 +1,7 @@
 // Unified Storage: Telegram CloudStorage + localStorage fallback
+// Usage: const storage = makeStorage('lmn')
+// Cloud keys: {uid}_{key}        (e.g. 123_profile)
+// localStorage keys: {prefix}_{uid}_{key}  (e.g. lmn_123_profile)
 
 interface TgWebApp {
   ready: () => void
@@ -31,8 +34,6 @@ export function getTg(): TgWebApp | undefined {
 export function isInTelegram(): boolean {
   try {
     const tg = (window as any).Telegram?.WebApp
-    // Be lenient: WebApp object exists = we're in Telegram
-    // initData may be empty when opened from bot menu button
     return !!tg && typeof tg.ready === 'function'
   } catch { return false }
 }
@@ -64,18 +65,18 @@ function cloudGetAll(keys: string[]): Promise<Record<string, string> | null> {
   })
 }
 
-function userKey(key: string, prefix: string): string {
+function userKey(key: string): string {
   const uid = getUserId()
-  return uid ? `${prefix}_${uid}_${key}` : `${prefix}_${key}`
+  return uid ? `${uid}_${key}` : key
 }
 
 export function lsSet(key: string, value: string, prefix: string) {
-  const k = userKey(key, prefix)
+  const k = `${prefix}_${userKey(key)}`
   try { localStorage.setItem(k, value) } catch {}
 }
 
 export function lsGet(key: string, prefix: string): string | null {
-  const k = userKey(key, prefix)
+  const k = `${prefix}_${userKey(key)}`
   try { return localStorage.getItem(k) } catch { return null }
 }
 
@@ -98,31 +99,31 @@ export function makeStorage(prefix: string) {
   return {
     async set(key: string, value: string): Promise<void> {
       lsSet(key, value, prefix)
-      const k = userKey(key, prefix)
+      const k = userKey(key)
       await cloudSet(k, value)
     },
     async get(key: string): Promise<string | null> {
-      const k = userKey(key, prefix)
+      const k = userKey(key)
       const cloud = await cloudGetAll([k])
       if (cloud && cloud[k]) return cloud[k]
       return lsGet(key, prefix)
     },
     async getAll(keys: string[]): Promise<Record<string, string>> {
-      const prefixed = keys.map(k => userKey(k, prefix))
+      const prefixed = keys.map(k => userKey(k))
       const cloud = await cloudGetAll(prefixed)
       const ls = lsGetAll(prefix)
       const uid = getUserId()
       const unPrefixed: Record<string, string> = {}
       if (cloud && uid) {
         Object.entries(cloud).forEach(([k, v]) => {
-          const shortKey = k.replace(`${prefix}_${uid}_`, '')
+          const shortKey = k.replace(`${uid}_`, '')
           unPrefixed[shortKey] = v
         })
       }
       return { ...ls, ...unPrefixed }
     },
     remove(key: string) {
-      const k = userKey(key, prefix)
+      const k = `${prefix}_${userKey(key)}`
       try { localStorage.removeItem(k) } catch {}
     },
   }

@@ -507,14 +507,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     setZodiacFilter(signs[(idx + 1) % signs.length])
   }
 
-  // Online = updated within 1 hour. Own profile always counts as active.
-  const ONE_HOUR = 60 * 60 * 1000
-  const isRecentlyActive = (u: UserProfile) => {
-    if (u.isOwn) return true
-    if (!u.updatedAt) return false
-    return Date.now() - new Date(u.updatedAt).getTime() < ONE_HOUR
-  }
-
   // Patch own profile with current invisible state (toggle may have changed it)
   const patchedOwnProfile = { ...ownProfile, isOwn: true, isInvisible: isInvisible || false }
   const allGridUsers: UserProfile[] = [patchedOwnProfile, ...users.filter(u => u.id !== ownProfile.id)]
@@ -524,7 +516,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   
   const filteredGrid = visibleGridUsers.filter((u) => {
     if (u.isOwn) return true
-    if (onlineOnly && !isRecentlyActive(u)) return false
+    if (onlineOnly && !isUserActive(u)) return false
     // Test users: hidden by default, admin can show
     // When shown, test users go through SAME filters as real users
     if (u.tgUsername === '_test_') return false
@@ -562,7 +554,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
   // Debug count (include own profile)
   // const nearbyCount = users.filter(u => u.id !== ownProfile.id).length
-  // const onlineCount = users.filter(u => u.id !== ownProfile.id && u.tgUsername !== '_test_' && isRecentlyActive(u)).length + 1 // +1 for self, exclude test users
+  // const onlineCount = users.filter(u => u.id !== ownProfile.id && u.tgUsername !== '_test_' && isUserActive(u)).length + 1 // +1 for self, exclude test users
 
   return (
     <div className="flex-1 overflow-y-auto min-h-0 pb-20">
