@@ -1,5 +1,5 @@
 import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock } from 'dating-core'
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
 import logoAnim from './assets/hkmod-logo-animated.mp4'
@@ -13,7 +13,6 @@ import {
   AlertTriangle,
   Lock,
   RefreshCw,
-  Users,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
 import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid } from 'dating-ui'
@@ -369,7 +368,7 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
             <p className="text-white font-bold text-lg">{user.age ? `${user.name}, ${user.age}` : user.name}</p>
             <div className="flex items-center gap-2 mt-0.5">
               <MapPin className="w-3.5 h-3.5 text-[#FF6B35]" />
-              <span className="text-[#8E8E93] text-xs">{formatDist(user.distance)}</span>
+              <span className="text-[#8E8E93] text-xs">{formatDist(user.distance ?? 0)}</span>
               {isUserActive(user) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
             </div>
           </div>
@@ -721,7 +720,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
       <div className="px-3 pt-1 flex items-center gap-2 text-[10px] text-[#8E8E93]">
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
-        <span className="text-[#5AC8FA]">v17.1H</span>
+        <span className="text-[#5AC8FA]">v17.2H</span>
         <span className="text-[#2C2C2E]">|</span>
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
       </div>
@@ -848,10 +847,10 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
                 isLoading={isLoadingUsers && users.length === 0}
                 matchingIds={matchingIds}
                 renderTileBottom={(user) => {
-                  const roleLabel = getGridRoleLabel(user.position, user.isSide)
+                  const roleLabel = getGridRoleLabel(user.position ?? 0, user.isSide ?? false)
                   return (
                     <div className="flex items-center justify-between">
-                      <p className="text-[#FF6B35] text-[7px] font-medium">{formatDist(user.distance)}</p>
+                      <p className="text-[#FF6B35] text-[7px] font-medium">{formatDist(user.distance ?? 0)}</p>
                       {!user.isOwn && <p className="text-[#8E8E93] text-[6px]">{getTimeAgo(user.updatedAt)}</p>}
                       <p className="text-[6px] font-bold text-[#8E8E93]">{roleLabel}</p>
                     </div>
@@ -1268,7 +1267,7 @@ export default function App() {
       alert('Profile lock released! Refresh to apply.')
       window.location.reload()
     }, []),
-    onError: useCallback((err) => {
+    onError: useCallback((err: any) => {
       console.error('Profile unlock payment error:', err)
     }, []),
   })
@@ -1401,7 +1400,7 @@ export default function App() {
       const uid = getUserId()
       if (uid) saveGridRowsUnlocked(uid, newRows)
     }, [gridRowsUnlocked]),
-    onError: useCallback((err) => {
+    onError: useCallback((err: any) => {
       console.error('Grid unlock payment error:', err)
     }, []),
   })
@@ -1445,7 +1444,7 @@ export default function App() {
       const uid = getUserId()
       if (uid) saveFiltersUnlocked(uid, true, expiresAt)
     }, []),
-    onError: useCallback((err) => {
+    onError: useCallback((err: any) => {
       console.error('Filter unlock payment error:', err)
     }, []),
   })
@@ -1480,7 +1479,7 @@ export default function App() {
       const uid = getUserId()
       if (uid) updateInvisibleStatus(uid, until)
     }, []),
-    onError: useCallback((err) => {
+    onError: useCallback((err: any) => {
       console.error('Invisible payment error:', err)
     }, []),
   })

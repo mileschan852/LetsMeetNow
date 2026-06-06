@@ -164,7 +164,6 @@ export function ProfileGrid({
   isAdmin,
   isLoading,
   renderTileBottom,
-  renderTileLabel,
   renderTileTopLeft,
   tileClassName,
   matchingIds,
