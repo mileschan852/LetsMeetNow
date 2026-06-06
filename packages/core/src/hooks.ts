@@ -1,5 +1,6 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
-import { isUserActive } from './utils'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { isUserActive, dbToProfile } from './utils'
+import { fetchNearby } from './supabase'
 import type { UserProfile } from './types'
 
 export interface UseRefreshCooldownOptions {
@@ -30,6 +31,48 @@ export function useRefreshCooldown(options: UseRefreshCooldownOptions = {}) {
   }, [])
 
   return { lastRefreshTime, setLastRefreshTime, canRefresh, remainingMs, remainingFormatted, markRefreshed }
+}
+
+export interface UseNearbyRefreshOptions {
+  tableName: string
+  lat: number | undefined
+  lng: number | undefined
+  getMyId: () => string | number | null | undefined
+  isInvisible?: boolean
+  invisibleUntil?: string | null
+}
+
+export function useNearbyRefresh({ tableName, lat, lng, getMyId, isInvisible, invisibleUntil }: UseNearbyRefreshOptions) {
+  const [users, setUsers] = useState<UserProfile[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const getMyIdRef = useRef(getMyId)
+  getMyIdRef.current = getMyId
+
+  const invisibleRef = useRef({ isInvisible, invisibleUntil })
+  invisibleRef.current = { isInvisible, invisibleUntil }
+
+  const refresh = useCallback(() => {
+    if (!lat || !lng) return
+    setIsLoading(true)
+    fetchNearby(tableName, lat, lng).then(dbUsers => {
+      const myId = getMyIdRef.current()
+      const { isInvisible: inv, invisibleUntil: invUntil } = invisibleRef.current
+      const mapped = dbUsers.filter(u => String(u.id) !== String(myId)).map(u => dbToProfile(u, lat, lng))
+      const ownIdx = mapped.findIndex(u => u.isOwn)
+      if (ownIdx >= 0) {
+        mapped[ownIdx] = { ...mapped[ownIdx], isInvisible: !!inv, invisibleUntil: invUntil || undefined }
+      }
+      console.log('Nearby refresh:', mapped.length, 'users')
+      setUsers(mapped)
+      setIsLoading(false)
+    }).catch(err => {
+      console.error('Refresh error:', String(err).substring(0, 200))
+      setIsLoading(false)
+    })
+  }, [tableName, lat, lng])
+
+  return { users, setUsers, isLoading, setIsLoading, refresh }
 }
 
 export interface UseGridUsersOptions {

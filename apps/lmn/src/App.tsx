@@ -1,4 +1,4 @@
-import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, useRefreshCooldown, useGridUsers } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, useRefreshCooldown, useGridUsers, useNearbyRefresh } from 'dating-core'
 import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid, LocationGate, FlyingMessagesOverlay, UnlockTipCycle, UnlockTip } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
@@ -820,10 +820,8 @@ export default function App() {
     // LMN defaults
     gender: 'Male', seekingGender: 'Women', seekingToday: 'Just Browsing', hideAge: false,
   })
-  const [users, setUsers] = useState<UserProfile[]>([])
   const [photoOverlay, setPhotoOverlay] = useState<UserProfile | null>(null)
   const [locationGranted, setLocationGranted] = useState(false)
-  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [groupCheck, setGroupCheck] = useState<'checking' | 'member' | 'not_member'>('checking')
   // Default language from Telegram, fallback to English
@@ -1152,6 +1150,15 @@ export default function App() {
 
   const tgUserId = useRef<number | null>(null)
 
+  const { users, setUsers, isLoading: isLoadingUsers, setIsLoading: setIsLoadingUsers, refresh: handleRefresh } = useNearbyRefresh({
+    tableName: 'lmn_users',
+    lat: ownProfile.lat,
+    lng: ownProfile.lng,
+    getMyId: () => tgUserId.current,
+    isInvisible,
+    invisibleUntil,
+  })
+
   // Splash screen: auto-dismiss after 2.5s
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 2500)
@@ -1465,28 +1472,6 @@ export default function App() {
   // Initialize to -120s so first refresh is allowed immediately
   // Shared 5-min cooldown between top refresh and bottom button
   const { lastRefreshTime, setLastRefreshTime, canRefresh, remainingFormatted, markRefreshed } = useRefreshCooldown()
-
-  const handleRefresh = useCallback(() => {
-    const lat = ownProfile.lat
-    const lng = ownProfile.lng
-    if (!lat || !lng) return
-    setIsLoadingUsers(true)
-    fetchNearby('lmn_users', lat, lng).then(dbUsers => {
-      const myId = tgUserId.current
-      const mapped = dbUsers.filter(u => u.id !== myId).map(u => dbToProfile(u, lat, lng))
-      // Override own invisible status with local state (in case DB column missing)
-      const ownIdx = mapped.findIndex(u => u.isOwn)
-      if (ownIdx >= 0) {
-        mapped[ownIdx] = { ...mapped[ownIdx], isInvisible: isInvisible, invisibleUntil: invisibleUntil || undefined }
-      }
-      console.log('Nearby refresh:', mapped.length, 'users')
-      setUsers(mapped)
-      setIsLoadingUsers(false)
-    }).catch(err => {
-      console.error('Refresh error:', String(err).substring(0, 200))
-      setIsLoadingUsers(false)
-    })
-  }, [ownProfile.lat, ownProfile.lng])
 
   // Auto refresh every 5 minutes — triggers when lat/lng available
   useEffect(() => {
