@@ -143,3 +143,30 @@ export function dbToProfile(u: any, myLat: number, myLng: number): UserProfile {
     hideAge: !!u.hide_age,
   }
 }
+
+// ─── Role Helpers (HKMOD) ───────────────────────────────────────────
+
+export type RoleFilterMode = 'All' | 'B' | 'VB' | 'V' | 'VT' | 'T' | 'Side'
+
+export function formatRole(value: number, isSide: boolean): string {
+  if (isSide) return 'Side'
+  return value === 0 ? '0' : value === 1 ? '1' : String(value)
+}
+
+export function getGridRoleLabel(value: number, isSide: boolean): string {
+  if (isSide) return 'Side'
+  return value === 0 ? '0 (Bottom)' : value === 1 ? '1 (Top)' : String(value)
+}
+
+export function getFilterColor(mode: RoleFilterMode): string {
+  const colors: Record<RoleFilterMode, string> = {
+    'All': 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]',
+    'B': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    'VB': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    'V': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    'VT': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    'T': 'bg-red-500/20 text-red-400 border-red-500/30',
+    'Side': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+  }
+  return colors[mode]
+}

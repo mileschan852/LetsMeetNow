@@ -7,4 +7,7 @@ export { hasValidKey, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffl
 export type { DbUser, Raffle, FlyingMessage, TravelEntry, DbTopic, UnlockStatus } from './supabase'
 export { requestPayment, openInvoice, usePaymentUnlock } from './payments'
 export type { PaymentUnlockOptions } from './payments'
-export { isAdminUser, getTimeAgo, getDistance, formatDist, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, isUserActive, isPrefLocked, detectRealPhoto, dbToProfile } from './utils'
+export { isAdminUser, getTimeAgo, getDistance, formatDist, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, isUserActive, isPrefLocked, detectRealPhoto, dbToProfile, formatRole, getGridRoleLabel, getFilterColor } from './utils'
+export type { RoleFilterMode } from './utils'
+export { useRefreshCooldown, useGridUsers } from './hooks'
+export type { UseRefreshCooldownOptions, UseGridUsersOptions } from './hooks'

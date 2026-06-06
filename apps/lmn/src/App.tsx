@@ -1,4 +1,4 @@
-import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, useRefreshCooldown, useGridUsers } from 'dating-core'
 import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid, LocationGate, FlyingMessagesOverlay, UnlockTipCycle, UnlockTip } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
@@ -154,46 +154,7 @@ const storage = createStorage({ prefix: 'lmn' })
 
 // ─── Role Helpers ────────────────────────────────────────────────────
 
-function formatRole(value: number, isSide: boolean): string {
-  if (isSide) return 'Side'
-  if (value === 0) return '0 Bottom'
-  if (value === 1) return '1 Top'
-  if (value <= 0.4) return `${value.toFixed(1)} Versatile Bottom`
-  if (value === 0.5) return `${value.toFixed(1)} Versatile`
-  return `${value.toFixed(1)} Versatile Top`
-}
-
-// Short role label shown on grid (B, VB, V, VT, T, Side)
-function getGridRoleLabel(value: number, isSide: boolean): string {
-  if (isSide) return 'Side'
-  if (value === 0) return 'B'
-  if (value === 1) return 'T'
-  if (value <= 0.4) return 'VB'
-  if (value === 0.5) return 'V'
-  return 'VT'
-}
-
-
-
 // ─── Filter Logic ────────────────────────────────────────────────────
-
-type RoleFilterMode = 'All' | 'B' | 'VB' | 'V' | 'VT' | 'T' | 'Side'
-
-// ─── Filter Logic ────────────────────────────────────────────────────
-
-
-function getFilterColor(mode: RoleFilterMode): string {
-  const colors: Record<RoleFilterMode, string> = {
-    'All': 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]',
-    'B': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    'VB': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    'V': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-    'VT': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-    'T': 'bg-red-500/20 text-red-400 border-red-500/30',
-    'Side': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-  }
-  return colors[mode]
-}
 
 // ─── Distance Helpers ─────────────────────────────────────────────────
 // ─── Photo Overlay ────────────────────────────────────────────────────
@@ -299,7 +260,7 @@ function UnlockTipCycleLMN({ lang, isPremium, gridRowsUnlocked, channelFollowUnl
 
 // ─── Main Screen ──────────────────────────────────────────────────────
 
-function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
+function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, canRefresh, remainingFormatted, markRefreshed, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
   ownProfile: UserProfile
   users: UserProfile[]
   onViewOwnProfile: () => void
@@ -315,8 +276,9 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   onPromptFilterUnlock: () => void
   onToggleInvisible: () => void
   gridRowsUnlocked: number
-  lastRefreshTime: number
-  setLastRefreshTime: (t: number) => void
+  canRefresh: boolean
+  remainingFormatted: string
+  markRefreshed: () => void
   isInvisible: boolean
   invisiblePurchased: boolean
   raffle: Raffle | null
@@ -357,54 +319,30 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     setZodiacFilter(signs[(idx + 1) % signs.length])
   }
 
-  // Patch own profile with current invisible state (toggle may have changed it)
-  const patchedOwnProfile = { ...ownProfile, isOwn: true, isInvisible: isInvisible || false }
-  const allGridUsers: UserProfile[] = [patchedOwnProfile, ...users.filter(u => u.id !== ownProfile.id)]
-  
-  // Invisible users: completely hidden from non-admins (not even greyed out)
-  const visibleGridUsers = isAdmin ? allGridUsers : allGridUsers.filter(u => u.isOwn || !u.isInvisible)
-  
-  const filteredGrid = visibleGridUsers.filter((u) => {
-    if (u.isOwn) return true
-    if (onlineOnly && !isUserActive(u)) return false
-    // Test users: hidden by default, admin can show
-    // When shown, test users go through SAME filters as real users
-    if (u.tgUsername === '_test_') return false
-    
-    // LMN filters: Status, Age, Zodiac
-    if (statusFilter !== 'All') {
-      if (statusFilter === 'Browsing' && u.seekingToday !== 'Just Browsing') return false
-      if (statusFilter === 'Chatting' && u.seekingToday !== 'Chat') return false
-      if (statusFilter === 'Webcam' && u.seekingToday !== 'Webcam') return false
-      if (statusFilter === 'Meetup' && !u.meetupType) return false
-    }
-    if (ageFilter !== 'All' && ownProfile.age) {
-      if (ageFilter === 'Older' && (u.age || 0) <= ownProfile.age) return false
-      if (ageFilter === 'Younger' && (u.age || 0) >= ownProfile.age) return false
-    }
-    if (zodiacFilter !== 'All' && u.dob) {
-      if (getZodiac(u.dob) !== zodiacFilter) return false
-    }
-    return true
-  }).sort((a, b) => {
-    // Own profile always first, then sort by distance (closest first)
-    if (a.isOwn) return -1
-    if (b.isOwn) return 1
-    return (a.distance || Infinity) - (b.distance || Infinity)
+  // Grid filtering via shared hook
+  const { sortedUsers, filteredGrid, matchingIds } = useGridUsers({
+    users,
+    ownProfile,
+    isAdmin,
+    isInvisible,
+    onlineOnly,
+    filterFn: useCallback((u: UserProfile) => {
+      if (statusFilter !== 'All') {
+        if (statusFilter === 'Browsing' && u.seekingToday !== 'Just Browsing') return false
+        if (statusFilter === 'Chatting' && u.seekingToday !== 'Chat') return false
+        if (statusFilter === 'Webcam' && u.seekingToday !== 'Webcam') return false
+        if (statusFilter === 'Meetup' && !u.meetupType) return false
+      }
+      if (ageFilter !== 'All' && ownProfile.age) {
+        if (ageFilter === 'Older' && (u.age || 0) <= ownProfile.age) return false
+        if (ageFilter === 'Younger' && (u.age || 0) >= ownProfile.age) return false
+      }
+      if (zodiacFilter !== 'All' && u.dob) {
+        if (getZodiac(u.dob) !== zodiacFilter) return false
+      }
+      return true
+    }, [statusFilter, ageFilter, zodiacFilter, ownProfile.age]),
   })
-
-  // New: matching users first, then fill remaining slots with closest non-matching (greyed out)
-  const matchingIds = new Set(filteredGrid.map(u => u.id))
-  const nonMatchingGrid = visibleGridUsers.filter(u => !matchingIds.has(u.id)).sort((a, b) => {
-    if (a.isOwn) return -1
-    if (b.isOwn) return 1
-    return (a.distance || Infinity) - (b.distance || Infinity)
-  })
-  const sortedUsers = [...filteredGrid, ...nonMatchingGrid]
-
-  // Debug count (include own profile)
-  // const nearbyCount = users.filter(u => u.id !== ownProfile.id).length
-  // const onlineCount = users.filter(u => u.id !== ownProfile.id && u.tgUsername !== '_test_' && isUserActive(u)).length + 1 // +1 for self, exclude test users
 
   return (
     <div className="flex-1 overflow-y-auto min-h-0 pb-20">
@@ -462,8 +400,8 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
           <button
             onClick={() => {
-              if (Date.now() - lastRefreshTime < 5 * 60 * 1000) return
-              setLastRefreshTime(Date.now())
+              if (!canRefresh) return
+              markRefreshed()
               onRefresh()
             }}
             className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press"
@@ -574,19 +512,19 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
                 <div className="mt-1.5 mx-0.5 select-none">
                   <button
                     className={"w-full rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all " + (
-                      Date.now() - lastRefreshTime >= 5 * 60 * 1000
+                      canRefresh
                         ? "bg-[#1A1A1A] border border-[#5AC8FA] text-[#5AC8FA] cursor-pointer active:scale-[0.98]"
                         : "bg-[#1A1A1A]/60 border border-[#2C2C2E] text-[#8E8E93] cursor-not-allowed"
                     )}
                     onClick={() => {
-                      if (Date.now() - lastRefreshTime >= 5 * 60 * 1000) {
-                        setLastRefreshTime(Date.now());
+                      if (canRefresh) {
+                        markRefreshed();
                         onRefresh();
                       }
                     }}
-                    disabled={Date.now() - lastRefreshTime < 5 * 60 * 1000}
+                    disabled={!canRefresh}
                   >
-                    {Date.now() - lastRefreshTime >= 5 * 60 * 1000 ? (
+                    {canRefresh ? (
                       <>
                         <RefreshCw className="w-4 h-4" />
                         <span className="text-[11px] font-medium">{lang === 'tc' ? '刷新' : lang === 'sc' ? '刷新' : 'Refresh'}</span>
@@ -594,7 +532,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
                     ) : (
                       <>
                         <span className="text-[11px]">{'\u{1F551}'}</span>
-                        <span className="text-[11px] font-medium">{(() => { const s = Math.ceil((5 * 60 * 1000 - (Date.now() - lastRefreshTime)) / 1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}` })()}</span>
+                        <span className="text-[11px] font-medium">{remainingFormatted}</span>
                       </>
                     )}
                   </button>
@@ -1526,7 +1464,7 @@ export default function App() {
   // ─── Refresh nearby users (manual + auto) ─────────────────────────
   // Initialize to -120s so first refresh is allowed immediately
   // Shared 5-min cooldown between top refresh and bottom button
-  const [lastRefreshTime, setLastRefreshTime] = useState(Date.now() - 300000)
+  const { lastRefreshTime, setLastRefreshTime, canRefresh, remainingFormatted, markRefreshed } = useRefreshCooldown()
 
   const handleRefresh = useCallback(() => {
     const lat = ownProfile.lat
@@ -1861,8 +1799,9 @@ export default function App() {
               }
               handleRefresh()
             }}
-            lastRefreshTime={lastRefreshTime}
-            setLastRefreshTime={setLastRefreshTime}
+            canRefresh={canRefresh}
+            remainingFormatted={remainingFormatted}
+            markRefreshed={markRefreshed}
             isInvisible={isInvisible}
             invisiblePurchased={hasPurchasedInvisible}
             raffle={raffle}
