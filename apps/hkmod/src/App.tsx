@@ -721,6 +721,8 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
       <div className="px-3 pt-1 flex items-center gap-2 text-[10px] text-[#8E8E93]">
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
+        <span className="text-[#5AC8FA]">v17.1H</span>
+        <span className="text-[#2C2C2E]">|</span>
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
       </div>
 
@@ -1592,9 +1594,9 @@ export default function App() {
       console.log('Storage loaded keys:', Object.keys(result))
 
       const loaded: Partial<UserProfile> = {}
-      // Load photo_url backup if Telegram one expired
+      // Load photo_url backup ONLY if we don't already have a fresh one from initData
       const savedPhoto = result[CLOUD.photoUrl]
-      if (savedPhoto && savedPhoto.trim() !== '') {
+      if (savedPhoto && savedPhoto.trim() !== '' && !loaded.tgPhotoUrl) {
         loaded.tgPhotoUrl = savedPhoto
         loaded.tgPhotos = [savedPhoto]
       }
