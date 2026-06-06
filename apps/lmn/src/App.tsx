@@ -620,10 +620,10 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   onClaimChannelFollow: () => void
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
-  // LMN filters: Gender, Seeking, Photo
-  const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All')
-  const [seekingFilter, setSeekingFilter] = useState<'All' | 'Men' | 'Women' | 'Both'>('All')
-  const [photoFilter, setPhotoFilter] = useState<'All' | 'Has Photo' | 'No Photo'>('All')
+  // LMN filters: Status, Age, Zodiac
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Browsing' | 'Chatting' | 'Webcam' | 'Meetup'>('All')
+  const [ageFilter, setAgeFilter] = useState<'All' | 'Older' | 'Younger'>('All')
+  const [zodiacFilter, setZodiacFilter] = useState<'All' | string>('All')
   // Admin: hidden test users removed
   // const [showTestUsers, setShowTestUsers] = useState(false)
 
@@ -635,17 +635,18 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     storageSet(CLOUD.lang, next)
   }
 
-  const cycleGenderFilter = () => {
-    const order: Array<'All' | 'Male' | 'Female'> = ['All', 'Male', 'Female']
-    setGenderFilter(order[(order.indexOf(genderFilter) + 1) % order.length])
+  const cycleStatusFilter = () => {
+    const order: Array<'All' | 'Browsing' | 'Chatting' | 'Webcam' | 'Meetup'> = ['All', 'Browsing', 'Chatting', 'Webcam', 'Meetup']
+    setStatusFilter(order[(order.indexOf(statusFilter) + 1) % order.length])
   }
-  const cycleSeekingFilter = () => {
-    const order: Array<'All' | 'Men' | 'Women' | 'Both'> = ['All', 'Men', 'Women', 'Both']
-    setSeekingFilter(order[(order.indexOf(seekingFilter) + 1) % order.length])
+  const cycleAgeFilter = () => {
+    const order: Array<'All' | 'Older' | 'Younger'> = ['All', 'Older', 'Younger']
+    setAgeFilter(order[(order.indexOf(ageFilter) + 1) % order.length])
   }
-  const cyclePhotoFilter = () => {
-    const order: Array<'All' | 'Has Photo' | 'No Photo'> = ['All', 'Has Photo', 'No Photo']
-    setPhotoFilter(order[(order.indexOf(photoFilter) + 1) % order.length])
+  const cycleZodiacFilter = () => {
+    const signs = ['All', 'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces']
+    const idx = signs.indexOf(zodiacFilter)
+    setZodiacFilter(signs[(idx + 1) % signs.length])
   }
 
   // Online = updated within 1 hour. Own profile always counts as active.
@@ -670,11 +671,20 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     // When shown, test users go through SAME filters as real users
     if (u.tgUsername === '_test_') return false
     
-    // LMN filters
-    if (genderFilter !== 'All' && u.gender !== genderFilter) return false
-    if (seekingFilter !== 'All' && u.seekingGender !== seekingFilter) return false
-    if (photoFilter === 'Has Photo' && !u.hasPhoto) return false
-    if (photoFilter === 'No Photo' && u.hasPhoto) return false
+    // LMN filters: Status, Age, Zodiac
+    if (statusFilter !== 'All') {
+      if (statusFilter === 'Browsing' && u.seekingToday !== 'Just Browsing') return false
+      if (statusFilter === 'Chatting' && u.seekingToday !== 'Chat') return false
+      if (statusFilter === 'Webcam' && u.seekingToday !== 'Webcam') return false
+      if (statusFilter === 'Meetup' && !u.meetupType) return false
+    }
+    if (ageFilter !== 'All' && ownProfile.age) {
+      if (ageFilter === 'Older' && (u.age || 0) <= ownProfile.age) return false
+      if (ageFilter === 'Younger' && (u.age || 0) >= ownProfile.age) return false
+    }
+    if (zodiacFilter !== 'All' && u.dob) {
+      if (getZodiac(u.dob) !== zodiacFilter) return false
+    }
     return true
   }).sort((a, b) => {
     // Own profile always first, then sort by distance (closest first)
@@ -789,7 +799,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         </div>
       )}
 
-      {/* Filter bar: 4 buttons — 1.online 2.photo 3.gender 4.seeking */}
+      {/* Filter bar: 3 buttons — 1.online 2.status 3.age 4.zodiac */}
       <div className="px-3 py-2">
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
           {/* 1. Offline/Online toggle */}
@@ -801,29 +811,26 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
             {onlineOnly ? t(lang, 'onlineStatus') : t(lang, 'offlineStatus')}
           </button>
 
-          {/* 2. Photo filter */}
+          {/* 2. Status filter */}
           <button
-            onClick={cyclePhotoFilter}
-            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${photoFilter === 'Has Photo' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : photoFilter === 'No Photo' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+            onClick={cycleStatusFilter}
+            className={`px-2 py-1 rounded-full text-[11px] font-medium transition-all nav-press flex-shrink-0 ${statusFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'bg-[#FF6B35]/20 text-[#FF6B35] border border-[#FF6B35]/30'}`}
           >
-            {photoFilter === 'All' ? 'Photo' : photoFilter === 'Has Photo' ? '✅ Photo' : '❌ Photo'}
+            {statusFilter === 'All' ? 'Status' : statusFilter}
           </button>
 
-          {/* Divider */}
-          <div className="w-px h-4 bg-[#2C2C2E] flex-shrink-0" />
-
-          {/* 3. Gender filter */}
-          <button onClick={cycleGenderFilter}
-            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${genderFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : genderFilter === 'Male' ? 'bg-blue-500/20 text-blue-400' : 'bg-pink-500/20 text-pink-400'}`}
+          {/* 3. Age filter */}
+          <button onClick={cycleAgeFilter}
+            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${ageFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : ageFilter === 'Older' ? 'bg-purple-500/20 text-purple-400' : 'bg-cyan-500/20 text-cyan-400'}`}
           >
-            {genderFilter === 'All' ? 'All' : genderFilter}
+            {ageFilter === 'All' ? 'Age' : ageFilter}
           </button>
 
-          {/* 4. Seeking filter */}
-          <button onClick={cycleSeekingFilter}
-            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${seekingFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : seekingFilter === 'Men' ? 'bg-blue-500/20 text-blue-400' : seekingFilter === 'Women' ? 'bg-pink-500/20 text-pink-400' : 'bg-purple-500/20 text-purple-400'}`}
+          {/* 4. Zodiac filter */}
+          <button onClick={cycleZodiacFilter}
+            className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press ${zodiacFilter === 'All' ? 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]' : 'bg-indigo-500/20 text-indigo-400'}`}
           >
-            {seekingFilter === 'All' ? 'Seeking' : seekingFilter}
+            {zodiacFilter === 'All' ? 'Zodiac' : zodiacFilter}
           </button>
         </div>
       </div>
