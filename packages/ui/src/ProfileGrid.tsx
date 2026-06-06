@@ -110,7 +110,7 @@ function GridTile({
 
       {/* Placeholder */}
       {(!photo || imgFailed || !imgLoaded) && (
-        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-20">
           <span className="text-lg font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
         </div>
       )}
