@@ -1,5 +1,7 @@
 // Shared utility functions for HKMOD & LMN
 
+import type { UserProfile } from './types'
+
 export function isAdminUser(
   user: { id?: number; username?: string } | null | undefined,
   adminIds: number[],
@@ -102,5 +104,42 @@ export async function detectRealPhoto(imageUrl: string): Promise<boolean> {
     return ct.includes('image/jpeg') || ct.includes('image/png') || ct.includes('image/webp') || ct.includes('image/gif')
   } catch {
     return true
+  }
+}
+
+export function dbToProfile(u: any, myLat: number, myLng: number): UserProfile {
+  const dist = u.lat && u.lng ? getDistance(myLat, myLng, u.lat, u.lng) : 0
+  return {
+    id: String(u.id),
+    name: u.name,
+    age: 0,
+    height: u.height,
+    weight: u.weight,
+    position: u.position,
+    isSide: u.is_side,
+    isOnline: u.is_online,
+    distance: Math.round(dist),
+    lat: u.lat,
+    lng: u.lng,
+    preference1: u.preference1 || undefined,
+    preference2: u.preference2 || undefined,
+    preference3: u.preference3 || undefined,
+    preference4: u.preference4 === 'Off' ? 'Travel' : u.preference4 || undefined,
+    openToMessages: u.open_to_messages || false,
+    tgUsername: u.tg_username || undefined,
+    tgPhotoUrl: u.photo_url?.startsWith('http') ? u.photo_url : undefined,
+    tgPhotos: u.photo_url?.startsWith('http') ? [u.photo_url] : [],
+    updatedAt: u.updated_at,
+    hasPhoto: !!(u.photo_url && u.photo_url.startsWith('http')),
+    hasRealPhoto: u.has_real_photo ?? undefined,
+    invisibleUntil: u.invisible_until ?? undefined,
+    isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
+    // LMN fields
+    gender: u.gender || undefined,
+    seekingGender: u.seeking_gender || undefined,
+    dob: u.dob ? u.dob : undefined,
+    seekingToday: u.seeking_today || undefined,
+    meetupType: u.meetup_type ? u.meetup_type : undefined,
+    hideAge: !!u.hide_age,
   }
 }

@@ -6,4 +6,4 @@ export { hasValidKey, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffl
 export type { DbUser, Raffle, FlyingMessage, TravelEntry, DbTopic } from './supabase'
 export { requestPayment, openInvoice, usePaymentUnlock } from './payments'
 export type { PaymentUnlockOptions } from './payments'
-export { isAdminUser, getTimeAgo, getDistance, formatDist, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, isUserActive, isPrefLocked, detectRealPhoto } from './utils'
+export { isAdminUser, getTimeAgo, getDistance, formatDist, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, isUserActive, isPrefLocked, detectRealPhoto, dbToProfile } from './utils'

@@ -1,4 +1,4 @@
-import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock } from 'dating-core'
+import { getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile } from 'dating-core'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
@@ -13,7 +13,7 @@ import {
   Lock,
   RefreshCw,
 } from 'lucide-react'
-import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
+import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type Raffle } from './lib/supabase'
 import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid, PhotoOverlay as PhotoOverlayBase, UnlockTipCycle, type UnlockTip } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -246,39 +246,6 @@ function getFilterColor(mode: RoleFilterMode): string {
 // ─── Distance
 
 // ─── DbUser → UserProfile ────────────────────────────────────────────
-
-function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
-  const dist = u.lat && u.lng ? getDistance(myLat, myLng, u.lat, u.lng) : 0
-  return {
-    id: String(u.id),
-    name: u.name,
-    age: 0,
-    height: u.height,
-    weight: u.weight,
-    position: u.position,
-    isSide: u.is_side,
-    isOnline: u.is_online,
-    distance: Math.round(dist),
-    lat: u.lat,
-    lng: u.lng,
-    preference1: (u.preference1 as 'Safe' | 'Raw') || 'Raw',
-    preference2: (u.preference2 as 'Clean' | 'Party' | 'Party✓') || 'Party',
-    preference3: (u.preference3 as '1on1' | 'Group') || 'Group',
-    preference4: (u.preference4 === 'Off' ? 'Travel' : u.preference4 as 'Host' | 'Travel' | 'Outdoor' | 'Sauna') || 'Travel',
-    openToMessages: u.open_to_messages || false,
-    tgUsername: u.tg_username || undefined,
-    tgPhotoUrl: u.photo_url?.startsWith('http') ? u.photo_url : undefined,
-    tgPhotos: u.photo_url?.startsWith('http') ? [u.photo_url] : [],
-    updatedAt: u.updated_at,
-    // hasPhoto: true = has any avatar image (real photo, initials, emoji)
-    hasPhoto: !!(u.photo_url && u.photo_url.startsWith('http')),
-    // hasRealPhoto: from DB (detected via Content-Type on user's login)
-    hasRealPhoto: u.has_real_photo ?? undefined,
-    // Invisible mode
-    invisibleUntil: u.invisible_until ?? undefined,
-    isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
-  }
-}
 
 // ─── Photo Overlay ────────────────────────────────────────────────────
 

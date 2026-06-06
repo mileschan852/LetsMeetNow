@@ -1,4 +1,4 @@
-import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto } from 'dating-core'
+import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile } from 'dating-core'
 import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid, LocationGate, FlyingMessagesOverlay, UnlockTipCycle, UnlockTip } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
@@ -277,46 +277,6 @@ function getFilterColor(mode: RoleFilterMode): string {
 }
 
 // ─── Distance Helpers ─────────────────────────────────────────────────
-function dbToProfile(u: any, myLat: number, myLng: number): UserProfile {
-  const dist = u.lat && u.lng ? getDistance(myLat, myLng, u.lat, u.lng) : 0
-  return {
-    id: String(u.id),
-    name: u.name,
-    age: 0,
-    height: u.height,
-    weight: u.weight,
-    position: u.position,
-    isSide: u.is_side,
-    isOnline: u.is_online,
-    distance: Math.round(dist),
-    lat: u.lat,
-    lng: u.lng,
-    preference1: u.preference1 as 'Safe' | 'Raw',
-    preference2: u.preference2 as 'Clean' | 'Party' | 'Party✓',
-    preference3: u.preference3 as '1on1' | 'Group',
-    preference4: (u.preference4 === 'Off' ? 'Travel' : u.preference4 as 'Host' | 'Travel' | 'Outdoor' | 'Sauna') || undefined,
-    openToMessages: u.open_to_messages || false,
-    tgUsername: u.tg_username || undefined,
-    tgPhotoUrl: u.photo_url?.startsWith('http') ? u.photo_url : undefined,
-    tgPhotos: u.photo_url?.startsWith('http') ? [u.photo_url] : [],
-    updatedAt: u.updated_at,
-    // hasPhoto: true = has any avatar image (real photo, initials, emoji)
-    hasPhoto: !!(u.photo_url && u.photo_url.startsWith('http')),
-    // hasRealPhoto: from DB (detected via Content-Type on user's login)
-    hasRealPhoto: u.has_real_photo ?? undefined,
-    // Invisible mode
-    invisibleUntil: u.invisible_until ?? undefined,
-    isInvisible: !!u.invisible_until && new Date(u.invisible_until).getTime() > Date.now(),
-    // LMN fields from DB
-    gender: u.gender || 'Male',
-    seekingGender: u.seeking_gender || 'Women',
-    dob: u.dob ? u.dob : undefined,
-    seekingToday: u.seeking_today || 'Just Browsing',
-    meetupType: u.meetup_type ? u.meetup_type : undefined,
-    hideAge: !!u.hide_age,
-  }
-}
-
 // ─── Zodiac Helpers ─────────────────────────────────────────────────
 
 function getZodiac(dob: string): string {

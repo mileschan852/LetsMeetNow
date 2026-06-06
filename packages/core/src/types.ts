@@ -12,25 +12,39 @@ export interface FilterConfig {
 }
 
 export interface UserProfile {
-  id: number
+  id: string
   name: string
-  tgPhotoUrl: string
-  height?: number
-  weight?: number
-  lat: number
-  lng: number
+  age: number
+  height: number
+  weight: number
+  position: number
+  isSide: boolean
+  isOnline: boolean
+  distance: number
+  lat?: number
+  lng?: number
+  isOwn?: boolean
+  preference1?: 'Safe' | 'Raw'
+  preference2?: 'Clean' | 'Party' | 'Party✓'
+  preference3?: '1on1' | 'Group'
+  preference4?: 'Host' | 'Travel' | 'Outdoor' | 'Sauna'
+  openToMessages?: boolean
+  tgUsername?: string
+  tgPhotoUrl?: string
+  tgPhotos?: string[]
+  updatedAt?: string
+  hasPhoto: boolean
+  hasRealPhoto?: boolean
+  invisibleUntil?: string
+  isInvisible: boolean
+  hideAge?: boolean
+  // LMN fields
   gender?: string
   seekingGender?: string
   dob?: string | null
-  seekingToday?: string | null
+  seekingToday?: string
   meetupType?: string | null
-  isOnline: boolean
-  isOwn?: boolean
-  updatedAt: string
-  distance?: number
-  isInvisible?: boolean
-  openToMessages?: boolean
-  hideAgeUntil?: string | null
+  // Compatibility fields
   tg_username?: string | null
   is_visible?: boolean
   grid_rows_unlocked?: number
@@ -38,13 +52,7 @@ export interface UserProfile {
   filters_unlocked_expires_at?: string | null
   invisible_until?: string | null
   profile_unlocked?: boolean
-  // HKMOD fields
-  position?: number | null
-  is_side?: boolean | null
-  preference1?: string | null
-  preference2?: string | null
-  preference3?: string | null
-  preference4?: string | null
+  hideAgeUntil?: string | null
 }
 
 export interface DbUser extends UserProfile {}
