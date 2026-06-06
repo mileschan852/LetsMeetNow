@@ -1,4 +1,4 @@
-import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile } from 'dating-core'
+import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked } from 'dating-core'
 import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid, LocationGate, FlyingMessagesOverlay, UnlockTipCycle, UnlockTip } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
@@ -277,35 +277,6 @@ function getFilterColor(mode: RoleFilterMode): string {
 }
 
 // ─── Distance Helpers ─────────────────────────────────────────────────
-// ─── Zodiac Helpers ─────────────────────────────────────────────────
-
-function getZodiac(dob: string): string {
-  const d = new Date(dob)
-  const month = d.getMonth() + 1
-  const day = d.getDate()
-  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries'
-  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus'
-  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini'
-  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer'
-  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo'
-  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo'
-  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra'
-  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio'
-  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius'
-  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'Capricorn'
-  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius'
-  return 'Pisces'
-}
-
-function getZodiacEmoji(sign: string): string {
-  const map: Record<string, string> = {
-    Aries: '♈', Taurus: '♉', Gemini: '♊', Cancer: '♋',
-    Leo: '♌', Virgo: '♍', Libra: '♎', Scorpio: '♏',
-    Sagittarius: '♐', Capricorn: '♑', Aquarius: '♒', Pisces: '♓',
-  }
-  return map[sign] || ''
-}
-
 // ─── Photo Overlay ────────────────────────────────────────────────────
 
 function PhotoOverlay({ user, onClose, onMessage, lang, ownProfile }: { user: UserProfile; onClose: () => void; onMessage: (u: UserProfile) => void; lang: Lang; ownProfile: UserProfile }) {
