@@ -1,4 +1,4 @@
-import { getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile } from 'dating-core'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
@@ -47,9 +47,12 @@ interface UserProfile {
   // Invisible mode
   invisibleUntil?: string
   isInvisible: boolean
+  // DOB + hide age
+  dob?: string
+  hideAge?: boolean
 }
 
-type View = 'MAIN' | 'OWN_PROFILE'
+type View = 'MAIN' | 'OWN_PROFILE' | 'PROFILE_SETUP'
 
 // ─── Telegram API ────────────────────────────────────────────────────
 
@@ -117,6 +120,8 @@ const ADMIN_USERNAMES = ['HKMembersOnly', 'hkmembersonly', 'MilesChan852', 'mile
 
 const CLOUD = {
   age: 'hk_age',
+  dob: 'hk_dob',
+  hideAge: 'hk_hide_age',
   height: 'hk_height',
   weight: 'hk_weight',
   position: 'hk_position',
@@ -141,90 +146,8 @@ const CLOUD = {
   channelFollowed: 'hk_channel_followed',
 }
 
-// Telegram CloudStorage
-function cloudSet(key: string, value: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const tg = getTg()
-    if (!tg?.CloudStorage) { resolve(false); return }
-    tg.CloudStorage.setItem(key, value, (err, done) => {
-      if (err) console.error('CloudStorage set error:', key, err)
-      resolve(!err && done)
-    })
-  })
-}
-
-function cloudGetAll(keys: string[]): Promise<Record<string, string> | null> {
-  return new Promise((resolve) => {
-    const tg = getTg()
-    if (!tg?.CloudStorage) { resolve(null); return }
-    tg.CloudStorage.getItems(keys, (err, result) => {
-      if (err) { console.error('CloudStorage get error:', err); resolve(null); return }
-      resolve(result || {})
-    })
-  })
-}
-
-function userKey(key: string): string {
-  const uid = getUserId()
-  return uid ? `${uid}_${key}` : key
-}
-
-const lsSet = (key: string, value: string) => {
-  const k = userKey(key)
-  try { localStorage.setItem('hkmoc_' + k, value) } catch {}
-}
-
-const lsGet = (key: string): string | null => {
-  const k = userKey(key)
-  try { return localStorage.getItem('hkmoc_' + k) } catch { return null }
-}
-
-const lsGetAll = (): Record<string, string> => {
-  const r: Record<string, string> = {}
-  const uid = getUserId()
-  const prefix = uid ? `hkmoc_${uid}_` : 'hkmoc_'
-  try {
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith(prefix)) {
-        const shortKey = uid ? k.replace(`hkmoc_${uid}_`, '') : k.replace('hkmoc_', '')
-        r[shortKey] = localStorage.getItem(k) || ''
-      }
-    })
-  } catch {}
-  return r
-}
-
-// Unified storage: saves to both Telegram CloudStorage AND localStorage with user ID prefix
-async function storageSet(key: string, value: string): Promise<void> {
-  lsSet(key, value)
-  const k = userKey(key)
-  await cloudSet(k, value)
-}
-
-async function storageGet(key: string): Promise<string | null> {
-  const k = userKey(key)
-  try {
-    const cloud = await cloudGetAll([k])
-    if (cloud && cloud[k]) return cloud[k]
-  } catch {}
-  return lsGet(key)
-}
-
-async function storageGetAll(): Promise<Record<string, string>> {
-  const keys = Object.values(CLOUD).map(k => userKey(k))
-  const cloud = await cloudGetAll(keys)
-  const ls = lsGetAll()
-  // Un-prefix cloud keys back to short form
-  const uid = getUserId()
-  const unPrefixed: Record<string, string> = {}
-  if (cloud && uid) {
-    Object.entries(cloud).forEach(([k, v]) => {
-      const shortKey = k.replace(`${uid}_`, '')
-      unPrefixed[shortKey] = v
-    })
-  }
-  return { ...ls, ...unPrefixed }
-}
+// Unified storage instance (replaces makeStorage / local wrappers)
+const storage = createStorage({ prefix: 'hkmoc' })
 
 // ─── Role Helpers ────────────────────────────────────────────────────
 
@@ -397,7 +320,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     const idx = LANG_CYCLE.indexOf(lang)
     const next = LANG_CYCLE[(idx + 1) % LANG_CYCLE.length]
     setLang(next)
-    storageSet(CLOUD.lang, next)
+    storage.set(CLOUD.lang, next)
   }
 
   const cyclePref1Filter = () => {
@@ -779,6 +702,114 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
 // ─── 30-day lock helper ──────────────────────────────────────────────
 
+// ─── Profile Setup Screen (mandatory before first use) ──────────────
+
+function ProfileSetupScreen({ lang, profile, onSave }: {
+  lang: Lang
+  profile: UserProfile
+  onSave: (updated: UserProfile) => void
+}) {
+  const [draft, setDraft] = useState<UserProfile>({ ...profile })
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { setDraft({ ...profile }) }, [profile.id])
+
+  const updateDraft = <K extends keyof UserProfile>(key: K, value: UserProfile[K]) => {
+    setDraft(prev => ({ ...prev, [key]: value }))
+    setSaved(false)
+  }
+
+  const handleSave = () => {
+    if (!draft.dob || draft.height <= 0 || draft.weight <= 0) {
+      alert(t(lang, 'fillAllFields') || 'Please fill in all fields (DOB, height, weight)')
+      return
+    }
+    onSave(draft)
+    setSaved(true)
+  }
+
+  const canSave = !!draft.dob && draft.height > 0 && draft.weight > 0
+
+  return (
+    <div className="flex-1 flex flex-col gap-4 min-h-0 overflow-y-auto pb-6">
+      {/* DOB */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'dob') || 'Date of Birth'}</span>
+          <span className="text-[10px] text-[#FF6B35]">*</span>
+        </div>
+        <input
+          type="date"
+          value={draft.dob || ''}
+          onChange={(e) => updateDraft('dob', e.target.value)}
+          className="w-full px-3 py-2.5 bg-[#1A1A1A] rounded-lg text-white text-sm outline-none"
+          max={new Date().toISOString().split('T')[0]}
+        />
+      </div>
+
+      {/* Height & Weight */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height') || 'Height'} / {t(lang, 'weight') || 'Weight'}</span>
+          <span className="text-[10px] text-[#FF6B35]">*</span>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
+            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height') || 'Height'}</span>
+            <input
+              type="number"
+              value={draft.height || ''}
+              placeholder="0"
+              onChange={(e) => updateDraft('height', parseInt(e.target.value) || 0)}
+              className="bg-transparent text-white text-sm font-medium text-right outline-none w-16"
+            />
+          </div>
+          <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
+            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'weight') || 'Weight'}</span>
+            <input
+              type="number"
+              value={draft.weight || ''}
+              placeholder="0"
+              onChange={(e) => updateDraft('weight', parseInt(e.target.value) || 0)}
+              className="bg-transparent text-white text-sm font-medium text-right outline-none w-16"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Hide Age */}
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          type="checkbox"
+          id="hideAge"
+          checked={!!draft.hideAge}
+          onChange={(e) => updateDraft('hideAge', e.target.checked)}
+          className="w-4 h-4 rounded border-[#2C2C2E] bg-[#1A1A1A] text-[#FF6B35]"
+        />
+        <label htmlFor="hideAge" className="text-sm text-[#8E8E93]">{t(lang, 'hideAge') || 'Hide Age'}</label>
+      </div>
+
+      {/* Save */}
+      <div className="mt-auto pt-4">
+        {saved && (
+          <div className="text-center text-[#00D4AA] text-xs font-semibold mb-2 animate-pulse">
+            {t(lang, 'saved') || 'Saved!'}
+          </div>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={!canSave}
+          className={`w-full h-14 rounded-xl text-white font-bold text-lg nav-press flex items-center justify-center gap-2 ${
+            canSave ? 'gradient-btn' : 'bg-[#1A1A1A] text-[#8E8E93] cursor-not-allowed'
+          }`}
+        >
+          <Check className="w-6 h-6" />{t(lang, 'continue') || 'Continue'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Own Profile Screen with SAVE button ──────────────────────────────
 
 function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }: {
@@ -797,7 +828,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
 
   // Load last saved timestamp from storage + global unlock
   useEffect(() => {
-    storageGetAll().then(result => {
+    storage.getAll().then(result => {
       // Migrate old month key to timestamp
       const oldMonth = result?.[CLOUD.prefChangedAt]
       const newTs = result?.[CLOUD.prefLockedAt]
@@ -808,7 +839,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         const ts = new Date(`${oldMonth}-01T00:00:00Z`).getTime()
         setLastSavedAt(ts)
         // Also save in new format
-        storageSet(CLOUD.prefLockedAt, String(ts))
+        storage.set(CLOUD.prefLockedAt, String(ts))
       }
     })
     // Fetch global unlock timestamp from Supabase
@@ -910,17 +941,18 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
 
     // Saving profile locks ALL lockable fields for 30 days
     const now = Date.now()
-    await storageSet(CLOUD.prefLockedAt, String(now))
+    await storage.set(CLOUD.prefLockedAt, String(now))
     setLastSavedAt(now)
-    await storageSet(CLOUD.height, String(draft.height))
-    await storageSet(CLOUD.weight, String(draft.weight))
-    await storageSet(CLOUD.position, String(draft.position))
-    await storageSet(CLOUD.isSide, String(draft.isSide))
-    await storageSet(CLOUD.pref1, draft.preference1 || 'Safe')
-    await storageSet(CLOUD.pref2, draft.preference2 || 'Clean')
-    await storageSet(CLOUD.pref3, draft.preference3 || '1on1')
-    await storageSet(CLOUD.pref4, draft.preference4 || 'Travel')
-    await storageSet(CLOUD.openMsg, String(draft.openToMessages || false))
+    await storage.set(CLOUD.height, String(draft.height))
+    await storage.set(CLOUD.weight, String(draft.weight))
+    await storage.set(CLOUD.position, String(draft.position))
+    await storage.set(CLOUD.isSide, String(draft.isSide))
+    await storage.set(CLOUD.pref1, draft.preference1 || 'Safe')
+    await storage.set(CLOUD.pref2, draft.preference2 || 'Clean')
+    await storage.set(CLOUD.pref3, draft.preference3 || '1on1')
+    await storage.set(CLOUD.pref4, draft.preference4 || 'Travel')
+    await storage.set(CLOUD.openMsg, String(draft.openToMessages || false))
+    await storage.set(CLOUD.hideAge, String(!!draft.hideAge))
     onSave(draft)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -1023,6 +1055,29 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
 
         <div className="h-px bg-[#2C2C2E] mb-3" />
 
+        {/* DOB (read-only after set) + Hide Age toggle */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'dob') || 'Date of Birth'}</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg mb-2">
+            <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'dob') || 'DOB'}</span>
+            <span className="text-white text-sm font-medium">{draft.dob || '—'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="hideAgeProfile"
+              checked={!!draft.hideAge}
+              onChange={(e) => updateDraft('hideAge', e.target.checked)}
+              className="w-4 h-4 rounded border-[#2C2C2E] bg-[#1A1A1A] text-[#FF6B35]"
+            />
+            <label htmlFor="hideAgeProfile" className="text-sm text-[#8E8E93]">{t(lang, 'hideAge') || 'Hide Age'}</label>
+          </div>
+        </div>
+
+        <div className="h-px bg-[#2C2C2E] mb-3" />
+
         {/* Role Section */}
         <div className="space-y-2 mb-4">
           <div className="flex items-center justify-between">
@@ -1091,12 +1146,14 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true)
   const [adminAction, setAdminAction] = useState<'release' | null>(null)
   const [ownProfile, setOwnProfile] = useState<UserProfile>({
-    id: 'own', name: 'You', age: 0, height: 178, weight: 72,
+    id: 'own', name: 'You', age: 0, height: 0, weight: 0,
     position: 0.5, isSide: false, isOnline: true, distance: 0, isOwn: true,
     preference1: 'Raw', preference2: 'Party', preference3: 'Group', preference4: 'Travel',
     openToMessages: false, tgUsername: '', tgPhotoUrl: '', tgPhotos: [],
     hasPhoto: false, hasRealPhoto: undefined,
     isInvisible: false,
+    dob: undefined,
+    hideAge: false,
   })
   const [users, setUsers] = useState<UserProfile[]>([])
   const [photoOverlay, setPhotoOverlay] = useState<UserProfile | null>(null)
@@ -1136,7 +1193,7 @@ export default function App() {
       setAdminAction('release')
     }, []),
     onPaymentSuccess: useCallback(() => {
-      storageSet(CLOUD.prefLockedAt, '0')
+      storage.set(CLOUD.prefLockedAt, '0')
       alert('Profile lock released! Refresh to apply.')
       window.location.reload()
     }, []),
@@ -1260,16 +1317,16 @@ export default function App() {
     onAdminUnlock: useCallback(() => {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
-      storageSet(CLOUD.gridRowsUnlocked, String(newRows))
-      storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      storage.set(CLOUD.gridRowsUnlocked, String(newRows))
+      storage.set(CLOUD.gridRowsUnlockedAt, String(Date.now()))
       const uid = getUserId()
       if (uid) saveGridRowsUnlocked('users', uid, newRows)
     }, [gridRowsUnlocked]),
     onPaymentSuccess: useCallback(() => {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
-      storageSet(CLOUD.gridRowsUnlocked, String(newRows))
-      storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      storage.set(CLOUD.gridRowsUnlocked, String(newRows))
+      storage.set(CLOUD.gridRowsUnlockedAt, String(Date.now()))
       const uid = getUserId()
       if (uid) saveGridRowsUnlocked('users', uid, newRows)
     }, [gridRowsUnlocked]),
@@ -1303,8 +1360,8 @@ export default function App() {
       setFiltersUnlocked(true)
       const now = Date.now()
       const expiresAt = new Date(now + 30 * 86400000).toISOString()
-      storageSet(CLOUD.filtersUnlocked, 'true')
-      storageSet(CLOUD.filtersUnlockedAt, String(now))
+      storage.set(CLOUD.filtersUnlocked, 'true')
+      storage.set(CLOUD.filtersUnlockedAt, String(now))
       const uid = getUserId()
       if (uid) saveFiltersUnlocked('users', uid, true, expiresAt)
     }, []),
@@ -1312,8 +1369,8 @@ export default function App() {
       setFiltersUnlocked(true)
       const now = Date.now()
       const expiresAt = new Date(now + 30 * 86400000).toISOString()
-      storageSet(CLOUD.filtersUnlocked, 'true')
-      storageSet(CLOUD.filtersUnlockedAt, String(now))
+      storage.set(CLOUD.filtersUnlocked, 'true')
+      storage.set(CLOUD.filtersUnlockedAt, String(now))
       const uid = getUserId()
       if (uid) saveFiltersUnlocked('users', uid, true, expiresAt)
     }, []),
@@ -1334,7 +1391,7 @@ export default function App() {
     } catch {}
     // Give the unlock immediately (we trust the user - it's a one-time thing)
     setChannelFollowUnlock(1)
-    storageSet(CLOUD.channelFollowed, '1')
+    storage.set(CLOUD.channelFollowed, '1')
   }, [channelFollowUnlock])
 
   // Invisible mode payment — 2000 Stars for 30 days
@@ -1348,7 +1405,7 @@ export default function App() {
       const until = new Date(Date.now() + 30 * 86400000).toISOString()
       setInvisibleUntil(until)
       setInvisibleActive(true)
-      storageSet(CLOUD.invisibleActive, 'true')
+      storage.set(CLOUD.invisibleActive, 'true')
       const uid = getUserId()
       if (uid) updateInvisibleStatus('users', uid, until)
     }, []),
@@ -1423,7 +1480,7 @@ export default function App() {
         }))
         // Save photo_url to CloudStorage (it expires after ~1hr!)
         if (photoUrl) {
-          storageSet(CLOUD.photoUrl, photoUrl)
+          storage.set(CLOUD.photoUrl, photoUrl)
         }
         // Photo gate: check if user has a real photo on every login
         const runPhotoCheck = async () => {
@@ -1455,13 +1512,13 @@ export default function App() {
           setOwnProfile(prev => ({ ...prev, hasRealPhoto: isReal }))
         })
         if (user.first_name) {
-          storageSet(CLOUD.name, user.first_name)
+          storage.set(CLOUD.name, user.first_name)
         }
       }
     }
 
     // Load saved data (including backup photo_url)
-    storageGetAll().then(result => {
+    storage.getAll().then(result => {
       if (!result || Object.keys(result).length === 0) return
       console.log('Storage loaded keys:', Object.keys(result))
 
@@ -1480,6 +1537,9 @@ export default function App() {
       if (hVal && hVal.trim() !== '') { const p = parseInt(hVal); if (!isNaN(p) && p > 0) loaded.height = p }
       const wVal = result[CLOUD.weight]
       if (wVal && wVal.trim() !== '') { const p = parseInt(wVal); if (!isNaN(p) && p > 0) loaded.weight = p }
+      // Load DOB + hideAge
+      if (result[CLOUD.dob]) loaded.dob = result[CLOUD.dob]
+      loaded.hideAge = result[CLOUD.hideAge] === 'true'
       const pVal = result[CLOUD.position]
       if (pVal && pVal.trim() !== '') { const p = parseFloat(pVal); if (!isNaN(p)) loaded.position = p }
       loaded.isSide = result[CLOUD.isSide] === 'true'
@@ -1505,13 +1565,13 @@ export default function App() {
       if (!isExpired && (startParam === 'unlocked' || result[CLOUD.filtersUnlocked] === 'true')) {
         setFiltersUnlocked(true)
         if (startParam === 'unlocked') {
-          storageSet(CLOUD.filtersUnlocked, 'true')
-          storageSet(CLOUD.filtersUnlockedAt, String(now))
+          storage.set(CLOUD.filtersUnlocked, 'true')
+          storage.set(CLOUD.filtersUnlockedAt, String(now))
         }
       } else if (isExpired) {
         // Expired — clear unlock
-        storageSet(CLOUD.filtersUnlocked, '')
-        storageSet(CLOUD.filtersUnlockedAt, '')
+        storage.set(CLOUD.filtersUnlocked, '')
+        storage.set(CLOUD.filtersUnlockedAt, '')
         setFiltersUnlocked(false)
       }
       // Load saved grid rows unlocked
@@ -1539,18 +1599,18 @@ export default function App() {
             : !status.filters_unlocked
           if (!filtersExpired && status.filters_unlocked) {
             setFiltersUnlocked(true)
-            storageSet(CLOUD.filtersUnlocked, 'true')
-            storageSet(CLOUD.filtersUnlockedAt, String(now))
+            storage.set(CLOUD.filtersUnlocked, 'true')
+            storage.set(CLOUD.filtersUnlockedAt, String(now))
           } else if (filtersExpired || !status.filters_unlocked) {
             setFiltersUnlocked(false)
-            storageSet(CLOUD.filtersUnlocked, '')
-            storageSet(CLOUD.filtersUnlockedAt, '')
+            storage.set(CLOUD.filtersUnlocked, '')
+            storage.set(CLOUD.filtersUnlockedAt, '')
           }
           // Sync grid_rows_unlocked
           const dbRows = status.grid_rows_unlocked || 0
           if (dbRows >= 0) {
             setGridRowsUnlocked(dbRows)
-            storageSet(CLOUD.gridRowsUnlocked, String(dbRows))
+            storage.set(CLOUD.gridRowsUnlocked, String(dbRows))
           }
           // Sync has_real_photo
           setOwnProfile(prev => ({ ...prev, hasRealPhoto: !!status.has_real_photo }))
@@ -1561,14 +1621,14 @@ export default function App() {
             if (!expired) {
               setInvisibleUntil(dbInvisible)
               // Load saved active state, default to on
-              storageGet(CLOUD.invisibleActive).then(saved => {
+              storage.get(CLOUD.invisibleActive).then(saved => {
                 setInvisibleActive(saved === 'false' ? false : true)
               }).catch(() => setInvisibleActive(true))
             } else {
               // Timer expired — make user visible (clear DB + local state)
               setInvisibleUntil(null)
               setInvisibleActive(false)
-              storageSet(CLOUD.invisibleActive, 'false')
+              storage.set(CLOUD.invisibleActive, 'false')
               updateInvisibleStatus('users', syncUserId, null)
             }
           }
@@ -1629,6 +1689,8 @@ export default function App() {
       lng,
       is_online: true,
       updated_at: new Date().toISOString(),
+      dob: ownProfile.dob || null,
+      hide_age: ownProfile.hideAge || false,
     }).then(result => {
       console.log('Upsert result:', result ? `success id=${result.id}` : 'null')
       // Auto 7-day filter unlock for new users
@@ -1640,7 +1702,7 @@ export default function App() {
     }).catch(err => {
       console.error('Upsert error:', String(err).substring(0, 200))
     })
-  }, [ownProfile.lat, ownProfile.lng, ownProfile.name, ownProfile.tgPhotoUrl, ownProfile.height, ownProfile.weight, ownProfile.position, ownProfile.isSide, ownProfile.preference1, ownProfile.preference2, ownProfile.preference3, ownProfile.preference4, ownProfile.openToMessages, ownProfile.tgUsername])
+  }, [ownProfile.lat, ownProfile.lng, ownProfile.name, ownProfile.tgPhotoUrl, ownProfile.height, ownProfile.weight, ownProfile.position, ownProfile.isSide, ownProfile.preference1, ownProfile.preference2, ownProfile.preference3, ownProfile.preference4, ownProfile.openToMessages, ownProfile.tgUsername, ownProfile.dob, ownProfile.hideAge])
 
   // ─── Heartbeat: update timestamp every 30s ────────────────────────
   useEffect(() => {
@@ -1725,8 +1787,8 @@ export default function App() {
     setLocationGranted(true)
     setIsLoadingUsers(true)
     setOwnProfile(prev => ({ ...prev, lat, lng }))
-    storageSet(CLOUD.lat, String(lat))
-    storageSet(CLOUD.lng, String(lng))
+    storage.set(CLOUD.lat, String(lat))
+    storage.set(CLOUD.lng, String(lng))
   }, [])
 
   // ─── Save profile handler ──────────────────────────────────────────
@@ -1754,6 +1816,8 @@ export default function App() {
         lng: updated.lng,
         is_online: true,
         updated_at: new Date().toISOString(),
+        dob: updated.dob || null,
+        hide_age: updated.hideAge || false,
       }).then(result => {
         console.log('Profile upsert result:', result ? 'success' : 'failed')
       }).catch(err => {
@@ -1925,6 +1989,61 @@ export default function App() {
     )
   }
 
+  // ─── Profile completion gate ───────────────────────────────────────
+  const isProfileComplete = !!ownProfile.dob && ownProfile.height > 0 && ownProfile.weight > 0
+  if (!isProfileComplete) {
+    return (
+      <div className="min-h-[100vh] bg-neutral-950 flex justify-center">
+        <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-[100vh] flex flex-col px-6 pt-12 pb-6 overflow-y-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <img src={logoImg} alt="HKMOD" className="w-10 h-10 rounded-full object-cover" />
+            <h1 className="text-xl font-bold gradient-text">{t(lang, 'completeProfile') || 'Complete Your Profile'}</h1>
+          </div>
+          <p className="text-[#8E8E93] text-sm mb-6">
+            {t(lang, 'completeProfileDesc') || 'Please fill in your details to continue using the app.'}
+          </p>
+
+          <ProfileSetupScreen
+            lang={lang}
+            profile={ownProfile}
+            onSave={async (updated) => {
+              setOwnProfile(updated)
+              await storage.set(CLOUD.dob, updated.dob || '')
+              await storage.set(CLOUD.height, String(updated.height))
+              await storage.set(CLOUD.weight, String(updated.weight))
+              await storage.set(CLOUD.hideAge, String(!!updated.hideAge))
+              // Upsert to Supabase
+              const uid = tgUserId.current
+              if (uid && updated.lat && updated.lng) {
+                upsertUser('users', {
+                  id: uid,
+                  name: updated.name,
+                  photo_url: updated.tgPhotoUrl || null,
+                  height: updated.height,
+                  weight: updated.weight,
+                  position: updated.position,
+                  is_side: updated.isSide,
+                  preference1: updated.preference1 || 'Raw',
+                  preference2: updated.preference2 || 'Party',
+                  preference3: updated.preference3 || 'Group',
+                  preference4: updated.preference4 || 'Travel',
+                  open_to_messages: updated.openToMessages || false,
+                  tg_username: updated.tgUsername || null,
+                  lat: updated.lat,
+                  lng: updated.lng,
+                  is_online: true,
+                  updated_at: new Date().toISOString(),
+                  dob: updated.dob || null,
+                  hide_age: updated.hideAge || false,
+                }).catch(console.error)
+              }
+            }}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <FlyingMessagesOverlay
@@ -1957,20 +2076,20 @@ export default function App() {
                 if (isInvisible) {
                   setInvisibleUntil(null)
                   setInvisibleActive(false)
-                  storageSet(CLOUD.invisibleActive, 'false')
+                  storage.set(CLOUD.invisibleActive, 'false')
                   if (tgUserId.current) updateInvisibleStatus('users', tgUserId.current, null)
                 } else {
                   const until = new Date(Date.now() + 30 * 86400000).toISOString()
                   setInvisibleUntil(until)
                   setInvisibleActive(true)
-                  storageSet(CLOUD.invisibleActive, 'true')
+                  storage.set(CLOUD.invisibleActive, 'true')
                   if (tgUserId.current) updateInvisibleStatus('users', tgUserId.current, until)
                 }
               } else if (hasPurchasedInvisible) {
                 // Non-admin + purchased: toggle active state only
                 const newActive = !invisibleActive
                 setInvisibleActive(newActive)
-                storageSet(CLOUD.invisibleActive, String(newActive))
+                storage.set(CLOUD.invisibleActive, String(newActive))
               } else {
                 // Non-admin + not purchased: prompt payment
                 promptInvisiblePayment()
@@ -2011,7 +2130,7 @@ export default function App() {
               </p>
               <button
                 onClick={async () => {
-                  await storageSet(CLOUD.prefLockedAt, '0')
+                  await storage.set(CLOUD.prefLockedAt, '0')
                   alert('Your profile lock has been released! Refresh to apply.')
                   window.location.reload()
                   setAdminAction(null)

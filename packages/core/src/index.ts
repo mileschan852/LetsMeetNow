@@ -1,6 +1,7 @@
 export type { Lang } from './i18n'
 export type { UserProfile, FilterOption, FilterConfig, PaymentItem } from './types'
-export { getTg, isInTelegram, getUserId, getTgUser, lsSet, lsGet, lsGetAll, makeStorage } from './storage'
+export { getTg, isInTelegram, getUserId, getTgUser, lsSet, lsGet, lsGetAll, makeStorage, createStorage } from './storage'
+export type { StorageConfig } from './storage'
 export { t, tRole, tZodiac, getLangLabel, mergeDict, getDefaultLang } from './i18n'
 export { hasValidKey, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, getRaffleTickets, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked, setFiltersUnlocked, fetchNearby, setOnlineStatus, fetchGlobalUnlock, setGlobalUnlock, updateInvisibleStatus, updateHideAgeStatus, updateUserRealPhoto, deleteUser, clearAllUsers, updateUnlockCount, setUnlockCount, upsertUser, fetchUserUnlockStatus, fetchTopics, fetchTravelEntries, insertFlyingMessage, fetchFlyingMessages } from './supabase'
 export type { DbUser, Raffle, FlyingMessage, TravelEntry, DbTopic, UnlockStatus } from './supabase'

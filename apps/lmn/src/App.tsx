@@ -1,4 +1,4 @@
-import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked } from 'dating-core'
 import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid, LocationGate, FlyingMessagesOverlay, UnlockTipCycle, UnlockTip } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
@@ -149,91 +149,8 @@ const CLOUD = {
   dob: 'lmn_dob',
 }
 
-// Telegram CloudStorage
-function cloudSet(key: string, value: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const tg = getTg()
-    if (!tg?.CloudStorage) { resolve(false); return }
-    tg.CloudStorage.setItem(key, value, (err, done) => {
-      if (err) console.error('CloudStorage set error:', key, err)
-      resolve(!err && done)
-    })
-  })
-}
-
-function cloudGetAll(keys: string[]): Promise<Record<string, string> | null> {
-  return new Promise((resolve) => {
-    const tg = getTg()
-    if (!tg?.CloudStorage) { resolve(null); return }
-    tg.CloudStorage.getItems(keys, (err, result) => {
-      if (err) { console.error('CloudStorage get error:', err); resolve(null); return }
-      resolve(result || {})
-    })
-  })
-}
-
-// localStorage fallback with user ID prefix
-function userKey(key: string): string {
-  const uid = getUserId()
-  return uid ? `${uid}_${key}` : key
-}
-
-const lsSet = (key: string, value: string) => {
-  const k = userKey(key)
-  try { localStorage.setItem('lmn_' + k, value) } catch {}
-}
-
-const lsGet = (key: string): string | null => {
-  const k = userKey(key)
-  try { return localStorage.getItem('lmn_' + k) } catch { return null }
-}
-
-const lsGetAll = (): Record<string, string> => {
-  const r: Record<string, string> = {}
-  const uid = getUserId()
-  const prefix = uid ? `lmn_${uid}_` : 'lmn_'
-  try {
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith(prefix)) {
-        const shortKey = uid ? k.replace(`lmn_${uid}_`, '') : k.replace('lmn_', '')
-        r[shortKey] = localStorage.getItem(k) || ''
-      }
-    })
-  } catch {}
-  return r
-}
-
-// Unified storage: saves to both Telegram CloudStorage AND localStorage with user ID prefix
-async function storageSet(key: string, value: string): Promise<void> {
-  lsSet(key, value)
-  const k = userKey(key)
-  await cloudSet(k, value)
-}
-
-async function storageGet(key: string): Promise<string | null> {
-  const k = userKey(key)
-  try {
-    const cloud = await cloudGetAll([k])
-    if (cloud && cloud[k]) return cloud[k]
-  } catch {}
-  return lsGet(key)
-}
-
-async function storageGetAll(): Promise<Record<string, string>> {
-  const keys = Object.values(CLOUD).map(k => userKey(k))
-  const cloud = await cloudGetAll(keys)
-  const ls = lsGetAll()
-  // Un-prefix cloud keys back to short form
-  const uid = getUserId()
-  const unPrefixed: Record<string, string> = {}
-  if (cloud && uid) {
-    Object.entries(cloud).forEach(([k, v]) => {
-      const shortKey = k.replace(`${uid}_`, '')
-      unPrefixed[shortKey] = v
-    })
-  }
-  return { ...ls, ...unPrefixed }
-}
+// Unified storage instance (replaces makeStorage / local wrappers)
+const storage = createStorage({ prefix: 'lmn' })
 
 // ─── Role Helpers ────────────────────────────────────────────────────
 
@@ -423,7 +340,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
     const idx = LANG_CYCLE.indexOf(lang)
     const next = LANG_CYCLE[(idx + 1) % LANG_CYCLE.length]
     setLang(next)
-    storageSet(CLOUD.lang, next)
+    storage.set(CLOUD.lang, next)
   }
 
   const cycleStatusFilter = () => {
@@ -774,7 +691,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
 
     // 12-hour cooldown for seekingToday
     if (draft.seekingToday !== profile.seekingToday) {
-      const lastStr = await storageGet(CLOUD.seekingTodayChangedAt)
+      const lastStr = await storage.get(CLOUD.seekingTodayChangedAt)
       const lastTs = lastStr ? parseInt(lastStr) : 0
       const hoursSince = (Date.now() - lastTs) / (1000 * 60 * 60)
       if (lastTs > 0 && hoursSince < 12) {
@@ -782,16 +699,16 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         alert('Seeking Today can only be changed every 12 hours. ' + Math.floor(minsLeft / 60) + 'h ' + (minsLeft % 60) + 'm remaining.')
         return
       }
-      await storageSet(CLOUD.seekingTodayChangedAt, String(Date.now()))
+      await storage.set(CLOUD.seekingTodayChangedAt, String(Date.now()))
     }
 
-    await storageSet(CLOUD.dob, draft.dob || '')
-    await storageSet(CLOUD.height, String(draft.height))
-    await storageSet(CLOUD.weight, String(draft.weight))
-    await storageSet(CLOUD.pref1, draft.gender || 'Male')
-    await storageSet(CLOUD.pref2, draft.seekingGender || 'Women')
-    await storageSet(CLOUD.pref3, draft.seekingToday || 'Just Browsing')
-    await storageSet(CLOUD.hideAge, String(!!draft.hideAge))
+    await storage.set(CLOUD.dob, draft.dob || '')
+    await storage.set(CLOUD.height, String(draft.height))
+    await storage.set(CLOUD.weight, String(draft.weight))
+    await storage.set(CLOUD.pref1, draft.gender || 'Male')
+    await storage.set(CLOUD.pref2, draft.seekingGender || 'Women')
+    await storage.set(CLOUD.pref3, draft.seekingToday || 'Just Browsing')
+    await storage.set(CLOUD.hideAge, String(!!draft.hideAge))
     onSave(draft)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -1019,8 +936,8 @@ export default function App() {
       setFiltersUnlocked(true)
       const now = Date.now()
       const expiresAt = new Date(now + 30 * 86400000).toISOString()
-      storageSet(CLOUD.filtersUnlocked, 'true')
-      storageSet(CLOUD.filtersUnlockedAt, String(now))
+      storage.set(CLOUD.filtersUnlocked, 'true')
+      storage.set(CLOUD.filtersUnlockedAt, String(now))
       if (userId) {
         saveFiltersUnlocked('lmn_users', userId, true, expiresAt)
       }
@@ -1044,8 +961,8 @@ export default function App() {
             setFiltersUnlocked(true)
             const now = Date.now()
             const expiresAt = new Date(now + 30 * 86400000).toISOString()
-            storageSet(CLOUD.filtersUnlocked, 'true')
-            storageSet(CLOUD.filtersUnlockedAt, String(now))
+            storage.set(CLOUD.filtersUnlocked, 'true')
+            storage.set(CLOUD.filtersUnlockedAt, String(now))
             saveFiltersUnlocked('lmn_users', userId, true, expiresAt)
           }
         })
@@ -1092,7 +1009,7 @@ export default function App() {
       if (data.ok && data.result && tg?.openInvoice) {
         tg.openInvoice(data.result, async (status) => {
           if (status === 'paid') {
-            await storageSet(CLOUD.prefLockedAt, '0')
+            await storage.set(CLOUD.prefLockedAt, '0')
             alert('Profile lock released! Refresh to apply.')
             window.location.reload()
           }
@@ -1215,8 +1132,8 @@ export default function App() {
     if (isAdmin) {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
-      storageSet(CLOUD.gridRowsUnlocked, String(newRows))
-      storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      storage.set(CLOUD.gridRowsUnlocked, String(newRows))
+      storage.set(CLOUD.gridRowsUnlockedAt, String(Date.now()))
       if (userId) {
         await saveGridRowsUnlocked('lmn_users', userId, newRows)
       }
@@ -1239,8 +1156,8 @@ export default function App() {
           if (status === 'paid') {
             const newRows = gridRowsUnlocked + 1
             setGridRowsUnlocked(newRows)
-            storageSet(CLOUD.gridRowsUnlocked, String(newRows))
-            storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+            storage.set(CLOUD.gridRowsUnlocked, String(newRows))
+            storage.set(CLOUD.gridRowsUnlockedAt, String(Date.now()))
             await saveGridRowsUnlocked('lmn_users', userId, newRows)
           }
         })
@@ -1261,7 +1178,7 @@ export default function App() {
     } catch {}
     // Give the unlock immediately (we trust the user - it's a one-time thing)
     setChannelFollowUnlock(1)
-    storageSet(CLOUD.channelFollowed, '1')
+    storage.set(CLOUD.channelFollowed, '1')
   }, [channelFollowUnlock])
 
   // Invisible mode payment — 2000 Stars for 30 days
@@ -1287,7 +1204,7 @@ export default function App() {
             const until = new Date(Date.now() + 30 * 86400000).toISOString()
             setInvisibleUntil(until)
             setInvisibleActive(true)
-            storageSet(CLOUD.invisibleActive, 'true')
+            storage.set(CLOUD.invisibleActive, 'true')
             updateInvisibleStatus('lmn_users', userId, until)
           }
         })
@@ -1361,7 +1278,7 @@ export default function App() {
         }))
         // Save photo_url to CloudStorage (it expires after ~1hr!)
         if (photoUrl) {
-          storageSet(CLOUD.photoUrl, photoUrl)
+          storage.set(CLOUD.photoUrl, photoUrl)
         }
         // Photo gate: check if user has a real photo on every login
         const runPhotoCheck = async () => {
@@ -1393,13 +1310,13 @@ export default function App() {
           setOwnProfile(prev => ({ ...prev, hasRealPhoto: isReal }))
         })
         if (user.first_name) {
-          storageSet(CLOUD.name, user.first_name)
+          storage.set(CLOUD.name, user.first_name)
         }
       }
     }
 
     // Load saved data (including backup photo_url)
-    storageGetAll().then(result => {
+    storage.getAll().then(result => {
       if (!result || Object.keys(result).length === 0) return
       console.log('Storage loaded keys:', Object.keys(result))
 
@@ -1449,13 +1366,13 @@ export default function App() {
       if (!isExpired && (startParam === 'unlocked' || result[CLOUD.filtersUnlocked] === 'true')) {
         setFiltersUnlocked(true)
         if (startParam === 'unlocked') {
-          storageSet(CLOUD.filtersUnlocked, 'true')
-          storageSet(CLOUD.filtersUnlockedAt, String(now))
+          storage.set(CLOUD.filtersUnlocked, 'true')
+          storage.set(CLOUD.filtersUnlockedAt, String(now))
         }
       } else if (isExpired) {
         // Expired — clear unlock
-        storageSet(CLOUD.filtersUnlocked, '')
-        storageSet(CLOUD.filtersUnlockedAt, '')
+        storage.set(CLOUD.filtersUnlocked, '')
+        storage.set(CLOUD.filtersUnlockedAt, '')
         setFiltersUnlocked(false)
       }
       // Load saved grid rows unlocked
@@ -1483,18 +1400,18 @@ export default function App() {
             : !status.filters_unlocked
           if (!filtersExpired && status.filters_unlocked) {
             setFiltersUnlocked(true)
-            storageSet(CLOUD.filtersUnlocked, 'true')
-            storageSet(CLOUD.filtersUnlockedAt, String(now))
+            storage.set(CLOUD.filtersUnlocked, 'true')
+            storage.set(CLOUD.filtersUnlockedAt, String(now))
           } else if (filtersExpired || !status.filters_unlocked) {
             setFiltersUnlocked(false)
-            storageSet(CLOUD.filtersUnlocked, '')
-            storageSet(CLOUD.filtersUnlockedAt, '')
+            storage.set(CLOUD.filtersUnlocked, '')
+            storage.set(CLOUD.filtersUnlockedAt, '')
           }
           // Sync grid_rows_unlocked
           const dbRows = status.grid_rows_unlocked || 0
           if (dbRows >= 0) {
             setGridRowsUnlocked(dbRows)
-            storageSet(CLOUD.gridRowsUnlocked, String(dbRows))
+            storage.set(CLOUD.gridRowsUnlocked, String(dbRows))
           }
           // Sync has_real_photo
           setOwnProfile(prev => ({ ...prev, hasRealPhoto: !!status.has_real_photo }))
@@ -1505,14 +1422,14 @@ export default function App() {
             if (!expired) {
               setInvisibleUntil(dbInvisible)
               // Load saved active state, default to on
-              storageGet(CLOUD.invisibleActive).then(saved => {
+              storage.get(CLOUD.invisibleActive).then(saved => {
                 setInvisibleActive(saved === 'false' ? false : true)
               }).catch(() => setInvisibleActive(true))
             } else {
               // Timer expired — make user visible (clear DB + local state)
               setInvisibleUntil(null)
               setInvisibleActive(false)
-              storageSet(CLOUD.invisibleActive, 'false')
+              storage.set(CLOUD.invisibleActive, 'false')
               updateInvisibleStatus('lmn_users', syncUserId, null)
             }
           }
@@ -1675,8 +1592,8 @@ export default function App() {
     setLocationGranted(true)
     setIsLoadingUsers(true)
     setOwnProfile(prev => ({ ...prev, lat, lng }))
-    storageSet(CLOUD.lat, String(lat))
-    storageSet(CLOUD.lng, String(lng))
+    storage.set(CLOUD.lat, String(lat))
+    storage.set(CLOUD.lng, String(lng))
   }, [])
 
   // ─── Save profile handler ──────────────────────────────────────────
@@ -1924,20 +1841,20 @@ export default function App() {
                 if (isInvisible) {
                   setInvisibleUntil(null)
                   setInvisibleActive(false)
-                  storageSet(CLOUD.invisibleActive, 'false')
+                  storage.set(CLOUD.invisibleActive, 'false')
                   if (tgUserId.current) updateInvisibleStatus('lmn_users', tgUserId.current, null)
                 } else {
                   const until = new Date(Date.now() + 30 * 86400000).toISOString()
                   setInvisibleUntil(until)
                   setInvisibleActive(true)
-                  storageSet(CLOUD.invisibleActive, 'true')
+                  storage.set(CLOUD.invisibleActive, 'true')
                   if (tgUserId.current) updateInvisibleStatus('lmn_users', tgUserId.current, until)
                 }
               } else if (hasPurchasedInvisible) {
                 // Non-admin + purchased: toggle active state only
                 const newActive = !invisibleActive
                 setInvisibleActive(newActive)
-                storageSet(CLOUD.invisibleActive, String(newActive))
+                storage.set(CLOUD.invisibleActive, String(newActive))
               } else {
                 // Non-admin + not purchased: prompt payment
                 promptInvisiblePayment()
@@ -1978,7 +1895,7 @@ export default function App() {
               </p>
               <button
                 onClick={async () => {
-                  await storageSet(CLOUD.prefLockedAt, '0')
+                  await storage.set(CLOUD.prefLockedAt, '0')
                   alert('Your profile lock has been released! Refresh to apply.')
                   window.location.reload()
                   setAdminAction(null)

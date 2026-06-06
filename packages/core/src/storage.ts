@@ -95,7 +95,13 @@ export function lsGetAll(prefix: string): Record<string, string> {
   return r
 }
 
-export function makeStorage(prefix: string) {
+export interface StorageConfig {
+  prefix: string
+  // Future: encryption, sync strategy, ttl, etc.
+}
+
+export function createStorage(config: StorageConfig) {
+  const { prefix } = config
   return {
     async set(key: string, value: string): Promise<void> {
       lsSet(key, value, prefix)
@@ -108,9 +114,9 @@ export function makeStorage(prefix: string) {
       if (cloud && cloud[k]) return cloud[k]
       return lsGet(key, prefix)
     },
-    async getAll(keys: string[]): Promise<Record<string, string>> {
-      const prefixed = keys.map(k => userKey(k))
-      const cloud = await cloudGetAll(prefixed)
+    async getAll(keys?: string[]): Promise<Record<string, string>> {
+      const allKeys = keys ? keys.map(k => userKey(k)) : []
+      const cloud = allKeys.length > 0 ? await cloudGetAll(allKeys) : await cloudGetAll([])
       const ls = lsGetAll(prefix)
       const uid = getUserId()
       const unPrefixed: Record<string, string> = {}
@@ -127,4 +133,9 @@ export function makeStorage(prefix: string) {
       try { localStorage.removeItem(k) } catch {}
     },
   }
+}
+
+/** @deprecated Use createStorage({ prefix }) instead */
+export function makeStorage(prefix: string) {
+  return createStorage({ prefix })
 }
