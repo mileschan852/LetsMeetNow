@@ -1,11 +1,155 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { isUserActive, dbToProfile } from './utils'
-import { fetchNearby, setOnlineStatus, fetchFlyingMessages } from './supabase'
+import {
+  fetchNearby, setOnlineStatus, fetchFlyingMessages,
+  drawRaffleWinner, completeRaffle, updateInvisibleStatus, getActiveRaffle,
+  createRaffle, buyRaffleTicket, startRaffleCountdown, setRaffleDrawToNextWednesday,
+} from './supabase'
+import type { Raffle } from './supabase'
 import type { UserProfile, FlyingMessage } from './types'
+import { getTg } from './storage'
+import { isAdminUser } from './utils'
 
 export interface UseRefreshCooldownOptions {
   cooldownMs?: number
   initialOffsetMs?: number
+}
+
+export interface UseRaffleActionsOptions {
+  tableName: string
+  workerUrl: string
+  isAdmin: boolean
+  raffle: Raffle | null
+  setRaffle: (r: Raffle | null) => void
+}
+
+export interface UseAdminRecheckOptions {
+  isAdmin: boolean
+  setIsAdmin: (v: boolean) => void
+  adminIds: number[]
+  adminUsernames: string[]
+}
+
+export function useAdminRecheck({ isAdmin, setIsAdmin, adminIds, adminUsernames }: UseAdminRecheckOptions) {
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const tg = getTg()
+      const user = tg?.initDataUnsafe?.user
+      if (user && user.id) {
+        const adminCheck = isAdminUser(user, adminIds, adminUsernames)
+        if (adminCheck !== isAdmin) {
+          console.log(`Admin re-check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
+          setIsAdmin(adminCheck)
+        }
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isAdmin, setIsAdmin, adminIds, adminUsernames])
+}
+
+export function useRaffleActions({ tableName, workerUrl, isAdmin, raffle, setRaffle }: UseRaffleActionsOptions) {
+  const handleBuyRaffleTicket = useCallback(async () => {
+    if (!raffle || raffle.status === 'completed') return
+    const tg = getTg()
+    const userId = tg?.initDataUnsafe?.user?.id
+    if (!userId) return
+
+    // Check if raffle has already ended (deadline passed)
+    if (raffle.status === 'active' && raffle.ends_at && new Date(raffle.ends_at).getTime() <= Date.now()) {
+      const winner = await drawRaffleWinner(raffle.id)
+      if (winner) {
+        await completeRaffle(raffle.id, winner.user_id, winner.name)
+        if (raffle.prize_type === 'invisible') {
+          const until = new Date(Date.now() + 30 * 86400000).toISOString()
+          await updateInvisibleStatus(tableName, winner.user_id, until)
+        }
+      }
+      const final = await getActiveRaffle()
+      setRaffle(final || null)
+      return
+    }
+
+    // Admin gets free ticket
+    if (isAdmin) {
+      const ok = await buyRaffleTicket(raffle.id, userId)
+      if (ok) {
+        const updated = await getActiveRaffle()
+        if (updated) {
+          setRaffle(updated)
+          if (updated.current_tickets > 10 && updated.status === 'pending') {
+            await startRaffleCountdown(updated.id)
+            await setRaffleDrawToNextWednesday(updated.id)
+            const final = await getActiveRaffle()
+            if (final) setRaffle(final)
+          }
+        }
+      }
+      return
+    }
+
+    // Regular user: Stars payment
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 8000)
+      const res = await fetch(workerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'raffle' }),
+        signal: ctrl.signal,
+      })
+      clearTimeout(timer)
+      const data = await res.json()
+      if (data.ok && data.result && tg?.openInvoice) {
+        tg.openInvoice(data.result, async (status: string) => {
+          if (status === 'paid') {
+            const ok = await buyRaffleTicket(raffle.id, userId)
+            if (ok) {
+              const updated = await getActiveRaffle()
+              if (updated) {
+                setRaffle(updated)
+                if (updated.current_tickets > 10 && updated.status === 'pending') {
+                  await startRaffleCountdown(updated.id)
+                  await setRaffleDrawToNextWednesday(updated.id)
+                  const final = await getActiveRaffle()
+                  if (final) setRaffle(final)
+                }
+              }
+            }
+          }
+        })
+      }
+    } catch { /* Worker failed */ }
+  }, [raffle, isAdmin, tableName, workerUrl, setRaffle])
+
+  const handleStartNextRaffle = useCallback(async () => {
+    if (!isAdmin) return
+    const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
+    const newRaffle = await createRaffle(nextType)
+    if (newRaffle) setRaffle(newRaffle)
+  }, [isAdmin, raffle, setRaffle])
+
+  // Poll active raffle to check if deadline reached — auto-draw winner
+  useEffect(() => {
+    if (!raffle || raffle.status !== 'active' || !raffle.ends_at) return
+    const checkDeadline = async () => {
+      if (new Date(raffle.ends_at!).getTime() <= Date.now()) {
+        const winner = await drawRaffleWinner(raffle.id)
+        if (winner) {
+          await completeRaffle(raffle.id, winner.user_id, winner.name)
+          if (raffle.prize_type === 'invisible') {
+            const until = new Date(Date.now() + 30 * 86400000).toISOString()
+            await updateInvisibleStatus(tableName, winner.user_id, until)
+          }
+        }
+        const final = await getActiveRaffle()
+        setRaffle(final || null)
+      }
+    }
+    const interval = setInterval(checkDeadline, 30000)
+    return () => clearInterval(interval)
+  }, [raffle?.status, raffle?.ends_at, raffle?.id, raffle?.prize_type, tableName, setRaffle])
+
+  return { handleBuyRaffleTicket, handleStartNextRaffle }
 }
 
 export function useRefreshCooldown(options: UseRefreshCooldownOptions = {}) {

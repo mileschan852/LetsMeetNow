@@ -1,4 +1,4 @@
-import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, useRefreshCooldown, useGridUsers, useNearbyRefresh, useHeartbeat, useFlyingMessages } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, dbToProfile, getZodiac, getZodiacEmoji, getAge, isMonthlyEditUnlocked, useRefreshCooldown, useGridUsers, useNearbyRefresh, useHeartbeat, useFlyingMessages, useRaffleActions, useAdminRecheck, usePaymentUnlock } from 'dating-core'
 import { PhotoOverlay as PhotoOverlayBase, RaffleStatusDisplay, RaffleButton, BottomNav, ProfileGrid, LocationGate, FlyingMessagesOverlay, UnlockTipCycle, UnlockTip } from 'dating-ui'
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
@@ -847,258 +847,117 @@ export default function App() {
   // Admin skips payment, regular users pay 1000 Stars
 
   // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const tg = getTg()
-      const user = tg?.initDataUnsafe?.user
-      if (user && user.id) {
-        const adminCheck = isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)
-        if (adminCheck !== isAdmin) {
-          console.log(`Admin re-check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
-          setIsAdmin(adminCheck)
-        }
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [isAdmin])
+  // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
+  useAdminRecheck({ isAdmin, setIsAdmin, adminIds: ADMIN_IDS, adminUsernames: ADMIN_USERNAMES })
 
-  // ─── Filter unlock: purchase 30-day filter access ──────────────────
-  const promptFilterUnlock = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    // Admin bypass: skip Stars payment, unlock directly
-    if (isAdmin) {
+
+  const promptUnlockProfile = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://lmn-d.mileschan852.workers.dev/createinvoice',
+    amount: 100,
+    purpose: 'edit',
+    onAdminUnlock: () => {
+      setAdminAction('release')
+    },
+    onPaymentSuccess: () => {
+      storage.set(CLOUD.prefLockedAt, '0')
+      alert('Profile lock released! Refresh to apply.')
+      window.location.reload()
+    },
+  })
+
+  // ─── Raffle (Prize Draw) handlers ──────────────────────────────────
+
+  const { handleBuyRaffleTicket, handleStartNextRaffle } = useRaffleActions({
+    tableName: 'lmn_users',
+    workerUrl: 'https://lmn-d.mileschan852.workers.dev/createinvoice',
+    isAdmin,
+    raffle,
+    setRaffle,
+  })
+
+  const promptFilterUnlock = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://lmn-d.mileschan852.workers.dev/createinvoice',
+    amount: 500,
+    purpose: 'filters',
+    onAdminUnlock: () => {
       setFiltersUnlocked(true)
       const now = Date.now()
       const expiresAt = new Date(now + 30 * 86400000).toISOString()
       storage.set(CLOUD.filtersUnlocked, 'true')
       storage.set(CLOUD.filtersUnlockedAt, String(now))
+      const userId = tgUserId.current
       if (userId) {
         saveFiltersUnlocked('lmn_users', userId, true, expiresAt)
       }
-      return
-    }
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 500, purpose: 'filters' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status) => {
-          if (status === 'paid') {
-            setFiltersUnlocked(true)
-            const now = Date.now()
-            const expiresAt = new Date(now + 30 * 86400000).toISOString()
-            storage.set(CLOUD.filtersUnlocked, 'true')
-            storage.set(CLOUD.filtersUnlockedAt, String(now))
-            saveFiltersUnlocked('lmn_users', userId, true, expiresAt)
-          }
-        })
+    },
+    onPaymentSuccess: () => {
+      setFiltersUnlocked(true)
+      const now = Date.now()
+      const expiresAt = new Date(now + 30 * 86400000).toISOString()
+      storage.set(CLOUD.filtersUnlocked, 'true')
+      storage.set(CLOUD.filtersUnlockedAt, String(now))
+      const userId = tgUserId.current
+      if (userId) {
+        saveFiltersUnlocked('lmn_users', userId, true, expiresAt)
       }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+    },
+  })
 
-  // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const tg = getTg()
-      const user = tg?.initDataUnsafe?.user
-      if (user && user.id) {
-        const adminCheck = isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)
-        if (adminCheck !== isAdmin) {
-          console.log(`Admin re-check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
-          setIsAdmin(adminCheck)
-        }
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [isAdmin])
-
-
-  const promptUnlockProfile = useCallback(async () => {
-    if (isAdmin) {
-      setAdminAction('release')
-      return
-    }
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'edit' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status) => {
-          if (status === 'paid') {
-            await storage.set(CLOUD.prefLockedAt, '0')
-            alert('Profile lock released! Refresh to apply.')
-            window.location.reload()
-          }
-        })
-      }
-    } catch { /* Worker failed */ }
-  }, [isAdmin])
-
-  // ─── Raffle (Prize Draw) handlers ──────────────────────────────────
-
-  const handleBuyRaffleTicket = useCallback(async () => {
-    if (!raffle || raffle.status === 'completed') return
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-
-    // Check if raffle has already ended (deadline passed)
-    if (raffle.status === 'active' && raffle.ends_at && new Date(raffle.ends_at).getTime() <= Date.now()) {
-      // Draw winner
-      const winner = await drawRaffleWinner(raffle.id)
-      if (winner) {
-        await completeRaffle(raffle.id, winner.user_id, winner.name)
-        // Apply prize to winner
-        if (raffle.prize_type === 'invisible') {
-          const until = new Date(Date.now() + 30 * 86400000).toISOString()
-          await updateInvisibleStatus('lmn_users', winner.user_id, until)
-        }
-      }
-      const final = await getActiveRaffle()
-      setRaffle(final || null)
-      return
-    }
-
-    // Admin gets free ticket
-    if (isAdmin) {
-      const ok = await buyRaffleTicket(raffle.id, userId)
-      if (ok) {
-        const updated = await getActiveRaffle()
-        if (updated) {
-          setRaffle(updated)
-          // Auto-start countdown when >10 tickets reached, draw on next Wednesday
-          if (updated.current_tickets > 10 && updated.status === 'pending') {
-            await startRaffleCountdown(updated.id)
-            await setRaffleDrawToNextWednesday(updated.id)
-            const final = await getActiveRaffle()
-            if (final) setRaffle(final)
-          }
-        }
-      }
-      return
-    }
-
-    // Regular user: Stars payment
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'raffle' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status) => {
-          if (status === 'paid') {
-            const ok = await buyRaffleTicket(raffle.id, userId)
-            if (ok) {
-              const updated = await getActiveRaffle()
-              if (updated) {
-                setRaffle(updated)
-                if (updated.current_tickets > 10 && updated.status === 'pending') {
-                  await startRaffleCountdown(updated.id)
-                  await setRaffleDrawToNextWednesday(updated.id)
-                  const final = await getActiveRaffle()
-                  if (final) setRaffle(final)
-                }
-              }
-            }
-          }
-        })
-      }
-    } catch { /* Worker failed */ }
-  }, [raffle, isAdmin])
-
-  const handleStartNextRaffle = useCallback(async () => {
-    if (!isAdmin) return
-    // Auto-alternate: if last raffle was invisible (or none), start filters next
-    const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
-    const newRaffle = await createRaffle(nextType)
-    if (newRaffle) setRaffle(newRaffle)
-  }, [isAdmin, raffle])
-
-  // Poll active raffle to check if deadline reached — auto-draw winner
-  useEffect(() => {
-    if (!raffle || raffle.status !== 'active' || !raffle.ends_at) return
-    const checkDeadline = async () => {
-      if (new Date(raffle.ends_at!).getTime() <= Date.now()) {
-        const winner = await drawRaffleWinner(raffle.id)
-        if (winner) {
-          await completeRaffle(raffle.id, winner.user_id, winner.name)
-          if (raffle.prize_type === 'invisible') {
-            const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            await updateInvisibleStatus('lmn_users', winner.user_id, until)
-          }
-        }
-        const final = await getActiveRaffle()
-        setRaffle(final || null)
-      }
-    }
-    const interval = setInterval(checkDeadline, 30000) // Check every 30s
-    return () => clearInterval(interval)
-  }, [raffle?.status, raffle?.ends_at, raffle?.id, raffle?.prize_type])
-
-  const promptUnlock = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    // Admin bypass: skip Stars payment, unlock directly
-    if (isAdmin) {
+  const promptUnlock = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://lmn-d.mileschan852.workers.dev/createinvoice',
+    amount: 1000,
+    purpose: 'grid',
+    onAdminUnlock: () => {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
       storage.set(CLOUD.gridRowsUnlocked, String(newRows))
       storage.set(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      const userId = tgUserId.current
       if (userId) {
-        await saveGridRowsUnlocked('lmn_users', userId, newRows)
+        saveGridRowsUnlocked('lmn_users', userId, newRows)
       }
-      return
-    }
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 1000, purpose: 'grid' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status) => {
-          if (status === 'paid') {
-            const newRows = gridRowsUnlocked + 1
-            setGridRowsUnlocked(newRows)
-            storage.set(CLOUD.gridRowsUnlocked, String(newRows))
-            storage.set(CLOUD.gridRowsUnlockedAt, String(Date.now()))
-            await saveGridRowsUnlocked('lmn_users', userId, newRows)
-          }
-        })
+    },
+    onPaymentSuccess: () => {
+      const newRows = gridRowsUnlocked + 1
+      setGridRowsUnlocked(newRows)
+      storage.set(CLOUD.gridRowsUnlocked, String(newRows))
+      storage.set(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      const userId = tgUserId.current
+      if (userId) {
+        saveGridRowsUnlocked('lmn_users', userId, newRows)
       }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+    },
+  })
+
+  const promptInvisiblePayment = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://lmn-d.mileschan852.workers.dev/createinvoice',
+    amount: 2000,
+    purpose: 'invisible',
+    onAdminUnlock: () => {
+      const until = new Date(Date.now() + 30 * 86400000).toISOString()
+      setInvisibleUntil(until)
+      const userId = tgUserId.current
+      if (userId) {
+        updateInvisibleStatus('lmn_users', userId, until)
+      }
+      storage.set(CLOUD.invisibleActive, 'true')
+      setInvisibleActive(true)
+    },
+    onPaymentSuccess: () => {
+      const until = new Date(Date.now() + 30 * 86400000).toISOString()
+      setInvisibleUntil(until)
+      const userId = tgUserId.current
+      if (userId) {
+        updateInvisibleStatus('lmn_users', userId, until)
+      }
+      storage.set(CLOUD.invisibleActive, 'true')
+      setInvisibleActive(true)
+    },
+  })
 
   // ─── Channel Follow Unlock — +1 row for following @LetsMsetNow_Bot ─────────
   const handleClaimChannelFollow = useCallback(async () => {
@@ -1115,37 +974,6 @@ export default function App() {
     setChannelFollowUnlock(1)
     storage.set(CLOUD.channelFollowed, '1')
   }, [channelFollowUnlock])
-
-  // Invisible mode payment — 2000 Stars for 30 days
-  // Admin gets it free
-  const promptInvisiblePayment = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://lmn-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 2000, purpose: 'invisible' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, (status) => {
-          if (status === 'paid') {
-            const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            setInvisibleUntil(until)
-            setInvisibleActive(true)
-            storage.set(CLOUD.invisibleActive, 'true')
-            updateInvisibleStatus('lmn_users', userId, until)
-          }
-        })
-      }
-    } catch { /* Worker failed, silently ignore */ }
-  }
 
   const tgUserId = useRef<number | null>(null)
 

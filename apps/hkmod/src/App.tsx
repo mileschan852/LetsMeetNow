@@ -1,4 +1,4 @@
-import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile, formatRole, getGridRoleLabel, getFilterColor, type RoleFilterMode, useRefreshCooldown, useGridUsers, useNearbyRefresh, useHeartbeat, useFlyingMessages } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile, formatRole, getGridRoleLabel, getFilterColor, type RoleFilterMode, useRefreshCooldown, useGridUsers, useNearbyRefresh, useHeartbeat, useFlyingMessages, useRaffleActions, useAdminRecheck } from 'dating-core'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
@@ -14,7 +14,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import {
-  upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type Raffle
+  upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type Raffle
 } from 'dating-core'
 import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid, PhotoOverlay as PhotoOverlayBase, UnlockTipCycle, type UnlockTip } from 'dating-ui'
 
@@ -1149,110 +1149,13 @@ export default function App() {
 
   // ─── Raffle (Prize Draw) handlers ──────────────────────────────────
 
-  const handleBuyRaffleTicket = useCallback(async () => {
-    if (!raffle || raffle.status === 'completed') return
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-
-    // Check if raffle has already ended (deadline passed)
-    if (raffle.status === 'active' && raffle.ends_at && new Date(raffle.ends_at).getTime() <= Date.now()) {
-      // Draw winner
-      const winner = await drawRaffleWinner(raffle.id)
-      if (winner) {
-        await completeRaffle(raffle.id, winner.user_id, winner.name)
-        // Apply prize to winner
-        if (raffle.prize_type === 'invisible') {
-          const until = new Date(Date.now() + 30 * 86400000).toISOString()
-          await updateInvisibleStatus('users', winner.user_id, until)
-        }
-      }
-      const final = await getActiveRaffle()
-      setRaffle(final || null)
-      return
-    }
-
-    // Admin gets free ticket
-    if (isAdmin) {
-      const ok = await buyRaffleTicket(raffle.id, userId)
-      if (ok) {
-        const updated = await getActiveRaffle()
-        if (updated) {
-          setRaffle(updated)
-          // Auto-start countdown when >10 tickets reached, draw on next Wednesday
-          if (updated.current_tickets > 10 && updated.status === 'pending') {
-            await startRaffleCountdown(updated.id)
-            await setRaffleDrawToNextWednesday(updated.id)
-            const final = await getActiveRaffle()
-            if (final) setRaffle(final)
-          }
-        }
-      }
-      return
-    }
-
-    // Regular user: Stars payment
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'raffle' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status) => {
-          if (status === 'paid') {
-            const ok = await buyRaffleTicket(raffle.id, userId)
-            if (ok) {
-              const updated = await getActiveRaffle()
-              if (updated) {
-                setRaffle(updated)
-                if (updated.current_tickets > 10 && updated.status === 'pending') {
-                  await startRaffleCountdown(updated.id)
-                  await setRaffleDrawToNextWednesday(updated.id)
-                  const final = await getActiveRaffle()
-                  if (final) setRaffle(final)
-                }
-              }
-            }
-          }
-        })
-      }
-    } catch { /* Worker failed */ }
-  }, [raffle, isAdmin])
-
-  const handleStartNextRaffle = useCallback(async () => {
-    if (!isAdmin) return
-    // Auto-alternate: if last raffle was invisible (or none), start filters next
-    const nextType = (!raffle || raffle.prize_type === 'invisible') ? 'filters' : 'invisible'
-    const newRaffle = await createRaffle(nextType)
-    if (newRaffle) setRaffle(newRaffle)
-  }, [isAdmin, raffle])
-
-  // Poll active raffle to check if deadline reached — auto-draw winner
-  useEffect(() => {
-    if (!raffle || raffle.status !== 'active' || !raffle.ends_at) return
-    const checkDeadline = async () => {
-      if (new Date(raffle.ends_at!).getTime() <= Date.now()) {
-        const winner = await drawRaffleWinner(raffle.id)
-        if (winner) {
-          await completeRaffle(raffle.id, winner.user_id, winner.name)
-          if (raffle.prize_type === 'invisible') {
-            const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            await updateInvisibleStatus('users', winner.user_id, until)
-          }
-        }
-        const final = await getActiveRaffle()
-        setRaffle(final || null)
-      }
-    }
-    const interval = setInterval(checkDeadline, 30000) // Check every 30s
-    return () => clearInterval(interval)
-  }, [raffle?.status, raffle?.ends_at, raffle?.id, raffle?.prize_type])
+  const { handleBuyRaffleTicket, handleStartNextRaffle } = useRaffleActions({
+    tableName: 'users',
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    isAdmin,
+    raffle,
+    setRaffle,
+  })
 
   const promptUnlock = usePaymentUnlock({
     isAdmin,
@@ -1281,20 +1184,7 @@ export default function App() {
   })
 
   // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const tg = getTg()
-      const user = tg?.initDataUnsafe?.user
-      if (user && user.id) {
-        const adminCheck = isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES)
-        if (adminCheck !== isAdmin) {
-          console.log(`Admin re-check: id=${user.id}, username=${user.username}, admin=${adminCheck}`)
-          setIsAdmin(adminCheck)
-        }
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [isAdmin])
+  useAdminRecheck({ isAdmin, setIsAdmin, adminIds: ADMIN_IDS, adminUsernames: ADMIN_USERNAMES })
 
   const promptFilterUnlock = usePaymentUnlock({
     isAdmin,
