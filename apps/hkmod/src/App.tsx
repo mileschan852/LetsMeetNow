@@ -1,4 +1,4 @@
-import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, dbToProfile, formatRole, getGridRoleLabel, getFilterColor, type RoleFilterMode, useRefreshCooldown, useGridUsers, useNearbyRefresh, useHeartbeat, useFlyingMessages, useRaffleActions, useAdminRecheck } from 'dating-core'
+import { createStorage, getTg, isInTelegram, getUserId, getTimeAgo, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock, formatRole, getGridRoleLabel, getFilterColor, type RoleFilterMode, type UserProfile, useRefreshCooldown, useGridUsers, useNearbyRefresh, useHeartbeat, useFlyingMessages, useRaffleActions, useAdminRecheck } from 'dating-core'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
@@ -14,43 +14,11 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import {
-  upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type Raffle, type FlyingMessageItem
+  upsertUser, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, updateInvisibleStatus, getActiveRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type Raffle, type FlyingMessageItem
 } from 'dating-core'
 import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, ProfileGrid, PhotoOverlay as PhotoOverlayBase, UnlockTipCycle, type UnlockTip } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
-
-interface UserProfile {
-  id: string
-  name: string
-  age: number
-  height: number
-  weight: number
-  position: number
-  isSide: boolean
-  isOnline: boolean
-  distance: number
-  lat?: number
-  lng?: number
-  isOwn?: boolean
-  preference1?: 'Safe' | 'Raw'
-  preference2?: 'Clean' | 'Party' | 'Party✓'
-  preference3?: '1on1' | 'Group'
-  preference4?: 'Host' | 'Travel' | 'Outdoor' | 'Sauna'
-  openToMessages?: boolean
-  tgUsername?: string
-  tgPhotoUrl?: string
-  tgPhotos?: string[]
-  updatedAt?: string
-  hasPhoto: boolean   // true = has any avatar URL
-  hasRealPhoto?: boolean // true = real photo (from DB, detected via Content-Type)
-  // Invisible mode
-  invisibleUntil?: string
-  isInvisible: boolean
-  // DOB + hide age
-  dob?: string
-  hideAge?: boolean
-}
 
 type View = 'MAIN' | 'OWN_PROFILE' | 'PROFILE_SETUP'
 
@@ -326,7 +294,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   }
 
   // Grid filtering via shared hook
-  const { sortedUsers, filteredGrid, matchingIds } = useGridUsers({
+  const { sortedUsers, matchingIds } = useGridUsers({
     users,
     ownProfile,
     isAdmin,
@@ -1095,7 +1063,11 @@ export default function App() {
     dob: undefined,
     hideAge: false,
   })
-  const { users, setUsers, isLoading: isLoadingUsers, setIsLoading: setIsLoadingUsers, refresh: handleRefresh } = useNearbyRefresh({
+  const [invisibleUntil, setInvisibleUntil] = useState<string | null>(null)
+  const [invisibleActive, setInvisibleActive] = useState(false)
+  const isInvisible = invisibleActive && (invisibleUntil ? new Date(invisibleUntil).getTime() > Date.now() : false)
+  const hasPurchasedInvisible = invisibleUntil !== null
+  const { users, isLoading: isLoadingUsers, setIsLoading: setIsLoadingUsers, refresh: handleRefresh } = useNearbyRefresh({
     tableName: 'users',
     lat: ownProfile.lat,
     lng: ownProfile.lng,
@@ -1115,10 +1087,6 @@ export default function App() {
   const [gridRowsUnlocked, setGridRowsUnlocked] = useState(0)
   const [channelFollowUnlock, setChannelFollowUnlock] = useState(0)
   const [isPremium, setIsPremium] = useState(false)
-  const [invisibleUntil, setInvisibleUntil] = useState<string | null>(null)
-  const [invisibleActive, setInvisibleActive] = useState(false)
-  const isInvisible = invisibleActive && (invisibleUntil ? new Date(invisibleUntil).getTime() > Date.now() : false)
-  const hasPurchasedInvisible = invisibleUntil !== null
   const [raffle, setRaffle] = useState<Raffle | null>(null)
 
   // Flying messages: shared across all users via Supabase
@@ -1545,7 +1513,7 @@ export default function App() {
   // ─── Refresh nearby users (manual + auto) ─────────────────────────
   // Initialize to -120s so first refresh is allowed immediately
   // Shared 5-min cooldown between top refresh and bottom button
-  const { lastRefreshTime, setLastRefreshTime, canRefresh, remainingFormatted, markRefreshed } = useRefreshCooldown()
+  const { canRefresh, remainingFormatted, markRefreshed } = useRefreshCooldown()
 
   // Auto refresh every 5 minutes — triggers when lat/lng available
   useEffect(() => {
