@@ -11,7 +11,7 @@ cd "$TEMP_DIR"
 rm -rf dist/*
 cp -r /root/.openclaw/workspace/dating-apps/apps/hkmod/dist/* dist/
 git add -A
-git -c user.email="gospel@mileschan852.com" -c user.name="Gospel" commit -m "deploy: HKMOD from monorepo $(date -u +%Y-%m-%d_%H:%M)"
+git -c user.email="gospel@mileschan852.com" -c user.name="Gospel" commit -m "deploy: HKMOD from monorepo $(date -u +%Y-%m-%d_%H:%M)" || true
 git push
 rm -rf "$TEMP_DIR"
 

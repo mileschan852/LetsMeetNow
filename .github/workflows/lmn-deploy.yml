@@ -29,6 +29,10 @@ jobs:
         with:
           node-version: '22'
       
+      - name: Install core package dependencies
+        working-directory: packages/core
+        run: npm ci
+      
       - name: Install UI package dependencies
         working-directory: packages/ui
         run: npm ci
