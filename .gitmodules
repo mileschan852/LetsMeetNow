@@ -1,0 +1,3 @@
+[submodule "shared/dating-core"]
+	path = shared/dating-core
+	url = https://github.com/mileschan852/dating-core.git
