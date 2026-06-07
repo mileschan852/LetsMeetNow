@@ -2,7 +2,7 @@
 // Supports both app schemas via configurable tableName
 
 const SUPABASE_URL = 'https://fngcjkclxxodjaiqkfkm.supabase.co'
-const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuZ2Nqa2NseHhvZGphaXFrZmttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5OTE4NzUsImV4cCI6MjA5MjU2Nzg3NX0.dpoNP8EO7iZCFP7dzjD33mCdiJ0gxl5lTl6-hPY0HH4'
 
 export const hasValidKey = ANON_KEY.startsWith('eyJ') && ANON_KEY.length > 50
 
