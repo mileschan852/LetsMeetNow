@@ -5,8 +5,8 @@ import {
   drawRaffleWinner, completeRaffle, updateInvisibleStatus, getActiveRaffle,
   createRaffle, buyRaffleTicket, startRaffleCountdown, setRaffleDrawToNextWednesday,
 } from './supabase'
-import type { Raffle } from './supabase'
-import type { UserProfile, FlyingMessage } from './types'
+import type { Raffle, FlyingMessage } from './supabase'
+import type { UserProfile } from './types'
 import { getTg } from './storage'
 import { isAdminUser } from './utils'
 
@@ -257,11 +257,11 @@ export function useFlyingMessages({ pollIntervalMs = 8000 }: UseFlyingMessagesOp
       const oneMinAgo = new Date(Date.now() - 65000).toISOString()
       fetchFlyingMessages(oneMinAgo).then(msgs => {
         if (!msgs.length) return
-        setFlyingMessages(prev => {
-          const existingIds = new Set(prev.map(p => p.id))
+        setFlyingMessages((prev: FlyingMessageItem[]) => {
+          const existingIds = new Set(prev.map((p: FlyingMessageItem) => p.id))
           const newItems = msgs
-            .filter(m => !existingIds.has(m.id))
-            .map(m => ({
+            .filter((m: FlyingMessage) => !existingIds.has(m.id))
+            .map((m: FlyingMessage) => ({
               id: m.id,
               text: `@${m.username} said: ${m.text}`,
               top: `${m.top_percent}vh`,

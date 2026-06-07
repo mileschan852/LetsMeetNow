@@ -22,7 +22,7 @@ import {
   Send,
 } from 'lucide-react'
 import {
-  upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type Raffle
+  upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type Raffle, type FlyingMessageItem
 } from 'dating-core'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -489,7 +489,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
           return (
             <>
               <ProfileGrid
-                users={sortedUsers.filter(u => u.id !== ownProfile.id)}
+                users={sortedUsers.filter((u: UserProfile) => u.id !== ownProfile.id)}
                 ownProfile={{...ownProfile, isOwn: true}}
                 unlockedSlots={unlockedSlots}
                 totalRealUsers={totalRealUsers}
@@ -1529,7 +1529,7 @@ export default function App() {
     <>
       <FlyingMessagesOverlay
         messages={flyingMessages}
-        onDone={(id) => setFlyingMessages(prev => prev.filter(m => m.id !== id))}
+        onDone={(id) => setFlyingMessages((prev: FlyingMessageItem[]) => prev.filter((m: FlyingMessageItem) => m.id !== id))}
       />
       <div className="min-h-screen bg-neutral-950 flex justify-center">
         <div className="w-full max-w-[min(520px,100vw)] bg-[#0A0A0A] h-screen relative flex flex-col">
@@ -1637,7 +1637,7 @@ export default function App() {
               const top = 10 + Math.random() * 80 // 10% - 90% of viewport height
               const prefixed = `@${ownProfile.tgUsername || ownProfile.name || 'User'} said: ${text}`
               // Show locally immediately
-              setFlyingMessages(prev => [...prev, { id: Date.now(), text: prefixed, top: `${top}vh` }])
+              setFlyingMessages((prev: FlyingMessageItem[]) => [...prev, { id: Date.now(), text: prefixed, top: `${top}vh` }])
               // Store in Supabase so all users see it
               insertFlyingMessage({
                 text,
