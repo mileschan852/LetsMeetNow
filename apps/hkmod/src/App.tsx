@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, type DbUser, type Raffle } from './lib/supabase'
-import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton } from 'dating-ui'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, UnlockTipCycle } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -370,11 +370,10 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
   )
 }
 
-// ─── Unlock Tip Cycle — cycles through ways to unlock more rows ──────
+// ─── Unlock Tip Cycle — returns tips array for core UnlockTipCycle ──────
 
-function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock, onClaimChannelFollow }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number; onClaimChannelFollow: () => void }) {
-  const [idx, setIdx] = useState(0)
-  const tips = {
+function getHKMODTips({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock }: { lang: Lang; isPremium: boolean; gridRowsUnlocked: number; channelFollowUnlock: number }): string[] {
+  return ({
     en: [
       `Base: 2 rows free`,
       isPremium ? `Premium: +1 row` : `Premium: +1 row (not active)`,
@@ -415,33 +414,7 @@ function UnlockTipCycle({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock
       channelFollowUnlock ? `Группа: +1 строка ✅` : `Вступи в @HKMembersOnlyChat +1`,
       `Купить строки за ⭐`,
     ],
-  }
-  const list = tips[lang] || tips.en
-
-  // Auto-rotate every 5 seconds
-  useEffect(() => {
-    const i = setInterval(() => setIdx(i => (i + 1) % list.length), 5000)
-    return () => clearInterval(i)
-  }, [list.length])
-
-  const current = list[idx % list.length]
-  const isChannelTip = idx % list.length === 6
-
-  return (
-    <button
-      onClick={() => {
-        if (isChannelTip && !channelFollowUnlock) {
-          onClaimChannelFollow()
-        } else {
-          setIdx((i) => i + 1)
-        }
-      }}
-      className="ml-auto flex items-center gap-1 text-[9px] text-[#8E8E93] nav-press"
-    >
-      <span className="w-4 h-4 rounded-full bg-[#2C2C2E] flex items-center justify-center">💡</span>
-      <span className={`truncate max-w-[140px] ${isChannelTip && !channelFollowUnlock ? 'text-[#5AC8FA]' : ''}`}>{current}</span>
-    </button>
-  )
+  })[lang] || []
 }
 
 // ─── Profile Grid Tile ───────────────────────────────────────────────
@@ -769,7 +742,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
       <div className="px-3 pt-1 flex items-center gap-2 text-[10px] text-[#8E8E93]">
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
-        <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
+        <UnlockTipCycle tips={getHKMODTips({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock })} intervalMs={5000} onClick={!channelFollowUnlock ? (idx) => idx === 6 ? onClaimChannelFollow() : undefined : undefined} className="ml-auto" />
         <span className="ml-1 text-[#5AC8FA]">v15</span>
       </div>
 
@@ -911,7 +884,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
                   return (
                     <React.Fragment key={user.id}>
               {/* Divider row — tap to unlock +1 row */}
-                      {idx === unlockedSlots && hasMoreUsers && (
+                      {idx === unlockedSlots && unlockedSlots < 100 && (
                         <div
                           className="col-span-full flex items-center justify-center py-2 my-1 cursor-pointer select-none active:opacity-60 transition-opacity rounded-lg bg-gradient-to-r from-[#FF6B35]/10 to-purple-600/10 border border-[#FF6B35]/30"
                           onClick={onPromptUnlock}
@@ -920,7 +893,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
                           <span className="text-[10px] text-[#FF6B35] font-semibold">
                             {isAdmin ? 'Tap to unlock row (admin)' : 'Tap to unlock — 1000 ⭐'}
                           </span>
-                          <span className="text-[9px] text-[#8E8E93] ml-2">({totalRealUsers - unlockedSlots} more)</span>
+                          <span className="text-[9px] text-[#8E8E93] ml-2">{totalRealUsers > unlockedSlots ? `(${totalRealUsers - unlockedSlots} more)` : ''}</span>
                           <span className="mx-2 text-[10px] text-[#FF6B35] font-bold">🔒</span>
                         </div>
                       )}
@@ -2266,6 +2239,7 @@ export default function App() {
         {view === 'MAIN' && (
           <BottomNav
             lang={lang}
+            groupChatUrl="https://t.me/HKMembersOnlyChat"
             cooldownRemaining={Math.max(0, 60000 - (Date.now() - lastFlyingSendRef.current))}
             onSend={(text) => {
               // 1 min cooldown check
