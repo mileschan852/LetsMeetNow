@@ -15,8 +15,8 @@ import {
   RefreshCw,
   Users,
 } from 'lucide-react'
-import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, type DbUser, type Raffle } from './lib/supabase'
-import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, UnlockTipCycle } from 'dating-ui'
+import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, fetchUserProfile, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, type DbUser, type Raffle } from './lib/supabase'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -479,7 +479,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
 
 // ─── Main Screen ──────────────────────────────────────────────────────
 
-function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
+function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock }: {
   ownProfile: UserProfile
   users: UserProfile[]
   onViewOwnProfile: () => void
@@ -505,7 +505,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   onPromptUnlockProfile: () => void
   isPremium: boolean
   channelFollowUnlock: number
-  onClaimChannelFollow: () => void
 }) {
   const [onlineOnly, setOnlineOnly] = useState(false)
   // Role/Host filters have 'All' (multiple options). Safe/Raw/Clean/Party/1on1/Group are binary — no 'All'.
@@ -742,7 +741,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
       <div className="px-3 pt-1 flex items-center gap-2 text-[10px] text-[#8E8E93]">
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
-        <UnlockTipCycle tips={getHKMODTips({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock })} intervalMs={5000} onClick={!channelFollowUnlock ? (idx) => idx === 6 ? onClaimChannelFollow() : undefined : undefined} className="ml-auto" />
+        <span className="ml-auto text-[#5AC8FA]">{getHKMODTips({ lang, isPremium, gridRowsUnlocked, channelFollowUnlock })[0]}</span>
         <span className="ml-1 text-[#5AC8FA]">v15</span>
       </div>
 
@@ -1542,21 +1541,6 @@ export default function App() {
     } catch { /* Worker failed, silently ignore */ }
   }
 
-  const handleClaimChannelFollow = useCallback(async () => {
-    if (channelFollowUnlock) return
-    // Open the channel
-    const url = 'https://t.me/HKMO_D'
-    try {
-      const tg = getTg()
-      if (tg?.openTelegramLink) { tg.openTelegramLink(url) }
-      else if (tg?.openLink) { tg.openLink(url, { try_instant_view: false }) }
-      else { window.open(url, '_blank') }
-    } catch {}
-    // Give the unlock immediately (we trust the user - it's a one-time thing)
-    setChannelFollowUnlock(1)
-    cloudSet(CLOUD.channelFollowed, '1')
-  }, [channelFollowUnlock])
-
   // Invisible mode payment — 2000 Stars for 30 days
   // Admin gets it free
   const promptInvisiblePayment = async () => {
@@ -1713,7 +1697,8 @@ export default function App() {
       if (wVal && wVal.trim() !== '') { const p = parseInt(wVal); if (!isNaN(p) && p > 0) loaded.weight = p }
       const pVal = result[CLOUD.position]
       if (pVal && pVal.trim() !== '') { const p = parseFloat(pVal); if (!isNaN(p)) loaded.position = p }
-      loaded.isSide = result[CLOUD.isSide] === 'true'
+      const sVal = result[CLOUD.isSide]
+      if (sVal === 'true' || sVal === 'false') loaded.isSide = (sVal === 'true')
       if (result[CLOUD.pref1]) loaded.preference1 = result[CLOUD.pref1] as 'Safe' | 'Raw'
       if (result[CLOUD.pref2]) loaded.preference2 = result[CLOUD.pref2] as 'Clean' | 'Party' | 'Party✓'
       if (result[CLOUD.pref3]) loaded.preference3 = result[CLOUD.pref3] as '1on1' | 'Group'
@@ -1761,6 +1746,21 @@ export default function App() {
       // Sync unlock status from Supabase (handles refunds + cross-device)
       const syncUserId = tgUserId.current
       if (syncUserId) {
+        // Fetch full profile from DB to restore stats (cross-device sync)
+        fetchUserProfile(syncUserId).then(dbUser => {
+          if (dbUser) {
+            const updates: Partial<UserProfile> = {}
+            if (dbUser.height && dbUser.height > 0) updates.height = dbUser.height
+            if (dbUser.weight && dbUser.weight > 0) updates.weight = dbUser.weight
+            if (typeof dbUser.is_side === 'boolean') updates.isSide = dbUser.is_side
+            if (typeof dbUser.position === 'number') updates.position = dbUser.position
+            if (Object.keys(updates).length > 0) {
+              setOwnProfile(prev => ({ ...prev, ...updates }))
+              console.log('[DB Restore] merged stats from DB:', updates)
+            }
+          }
+        }).catch(err => console.error('fetchUserProfile error:', err))
+
         fetchUserUnlockStatus(syncUserId).then(status => {
           if (!status) return
           const now = Date.now()
@@ -2183,7 +2183,6 @@ export default function App() {
             onPromptFilterUnlock={promptFilterUnlock}
             gridRowsUnlocked={gridRowsUnlocked}
             channelFollowUnlock={channelFollowUnlock}
-            onClaimChannelFollow={handleClaimChannelFollow}
             onToggleInvisible={() => {
               if (isAdmin) {
                 // Admin: toggle on/off (free, controls invisible_until directly)
@@ -2269,7 +2268,6 @@ export default function App() {
         {view === 'MAIN' && (
           <BottomNav
             lang={lang}
-            groupChatUrl="https://t.me/HKMembersOnlyChat"
             cooldownRemaining={Math.max(0, 60000 - (Date.now() - lastFlyingSendRef.current))}
             onSend={(text) => {
               // 1 min cooldown check

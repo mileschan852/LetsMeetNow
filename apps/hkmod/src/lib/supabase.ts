@@ -294,6 +294,21 @@ export async function fetchUserUnlockStatus(userId: number): Promise<UnlockStatu
   }
 }
 
+// ─── Fetch single user profile ───────────────────────────────────────
+export async function fetchUserProfile(userId: number): Promise<DbUser | null> {
+  if (!hasValidKey) return null
+  try {
+    const fullCols = 'id,name,photo_url,height,weight,position,is_side,preference1,preference2,preference3,preference4,lat,lng,tg_username,is_online,updated_at,unlock_count,filters_unlocked,filters_unlocked_expires_at,edit_unlocked,edit_unlocked_expires_at,grid_rows_unlocked,has_real_photo,invisible_until,invisible_purchased_at'
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=${fullCols}`, { headers })
+    if (!res.ok) return null
+    const data = await res.json() as DbUser[]
+    return data[0] || null
+  } catch (err) {
+    console.error('fetchUserProfile failed:', err)
+    return null
+  }
+}
+
 // ─── Update has_real_photo ───────────────────────────────────────────
 
 export async function updateUserRealPhoto(userId: number, hasRealPhoto: boolean): Promise<boolean> {
