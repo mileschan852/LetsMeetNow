@@ -80,10 +80,10 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 // ─── Core CRUD ───────────────────────────────────────────────────────
 
-export async function upsertUser(user: Partial<DbUser>): Promise<DbUser | null> {
+export async function upsertUser(tableName: string, user: Partial<DbUser>): Promise<DbUser | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?on_conflict=id`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?on_conflict=id`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(user),
@@ -98,11 +98,11 @@ export async function upsertUser(user: Partial<DbUser>): Promise<DbUser | null> 
   }
 }
 
-export async function fetchNearby(lat: number, lng: number, limit = 100): Promise<DbUser[]> {
+export async function fetchNearby(tableName: string, lat: number, lng: number, limit = 100): Promise<DbUser[]> {
   if (!hasValidKey) return []
   try {
     const cols = Object.keys({} as DbUser).join(',')
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?select=${cols}&limit=200`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?select=${cols}&limit=200`, { headers })
     if (!res.ok) {
       const err = await res.text()
       console.error(`fetchNearby failed: ${res.status} ${err.substring(0, 200)}`)
@@ -121,10 +121,10 @@ export async function fetchNearby(lat: number, lng: number, limit = 100): Promis
   }
 }
 
-export async function setOnlineStatus(userId: number, isOnline: boolean): Promise<void> {
+export async function setOnlineStatus(tableName: string, userId: number, isOnline: boolean): Promise<void> {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ is_online: isOnline, updated_at: new Date().toISOString() }),
@@ -134,7 +134,7 @@ export async function setOnlineStatus(userId: number, isOnline: boolean): Promis
   }
 }
 
-export async function fetchUserUnlockStatus(userId: number): Promise<{
+export async function fetchUserUnlockStatus(tableName: string, userId: number): Promise<{
   grid_rows_unlocked: number
   filters_unlocked: boolean
   filters_unlocked_expires_at: string | null
@@ -146,7 +146,7 @@ export async function fetchUserUnlockStatus(userId: number): Promise<{
 } | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=grid_rows_unlocked,filters_unlocked,filters_unlocked_expires_at,invisible_until,invisible_purchased_at,edit_unlocked,edit_unlocked_expires_at,has_real_photo`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=grid_rows_unlocked,filters_unlocked,filters_unlocked_expires_at,invisible_until,invisible_purchased_at,edit_unlocked,edit_unlocked_expires_at,has_real_photo`, { headers })
     if (!res.ok) return null
     const data = await res.json()
     return data?.[0] || null
@@ -217,10 +217,10 @@ export async function createRaffle(prizeType: 'filters' | 'invisible'): Promise<
   } catch { return null }
 }
 
-export async function updateInvisibleStatus(userId: number, until: string | null): Promise<boolean> {
+export async function updateInvisibleStatus(tableName: string, userId: number, until: string | null): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ invisible_until: until }),
@@ -232,10 +232,10 @@ export async function updateInvisibleStatus(userId: number, until: string | null
   }
 }
 
-export async function fetchGlobalUnlock(): Promise<number> {
+export async function fetchGlobalUnlock(tableName: string): Promise<number> {
   if (!hasValidKey) return 0
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/global_unlock?select=unlocked_at&order=unlocked_at.desc&limit=1`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users_global_unlock?select=unlocked_at&order=unlocked_at.desc&limit=1`, { headers })
     if (!res.ok) return 0
     const data = await res.json() as { unlocked_at: string }[]
     if (data.length === 0) return 0
@@ -294,10 +294,10 @@ export function checkRealPhoto(photoUrl: string | null | undefined): boolean {
   return !photoUrl.includes('default') && !photoUrl.includes('placeholder')
 }
 
-export async function updateRealPhotoStatus(userId: number, hasRealPhoto: boolean): Promise<boolean> {
+export async function updateRealPhotoStatus(tableName: string, userId: number, hasRealPhoto: boolean): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ has_real_photo: hasRealPhoto }),
@@ -309,10 +309,10 @@ export async function updateRealPhotoStatus(userId: number, hasRealPhoto: boolea
   }
 }
 
-export async function fetchUserPhotoStatus(userId: number): Promise<{ has_real_photo: boolean } | null> {
+export async function fetchUserPhotoStatus(tableName: string, userId: number): Promise<{ has_real_photo: boolean } | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=has_real_photo`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=has_real_photo`, { headers })
     if (!res.ok) return null
     const data = await res.json() as { has_real_photo: boolean }[]
     return data[0] || null
@@ -322,10 +322,10 @@ export async function fetchUserPhotoStatus(userId: number): Promise<{ has_real_p
   }
 }
 
-export async function relockUserFeatures(userId: number): Promise<boolean> {
+export async function relockUserFeatures(tableName: string, userId: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ unlock_count: 0, filters_unlocked: false, grid_rows_unlocked: 0 }),
@@ -337,10 +337,10 @@ export async function relockUserFeatures(userId: number): Promise<boolean> {
   }
 }
 
-export async function deleteUser(userId: number): Promise<boolean> {
+export async function deleteUser(tableName: string, userId: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, { method: 'DELETE', headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, { method: 'DELETE', headers })
     return res.ok
   } catch (err) {
     console.error('deleteUser failed:', err)
@@ -348,7 +348,7 @@ export async function deleteUser(userId: number): Promise<boolean> {
   }
 }
 
-export async function clearAllUsers(): Promise<boolean> {
+export async function clearAllUsers(tableName: string): Promise<boolean> {
   if (!hasValidKey) return false
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/users?is_admin=eq.false`, { method: 'DELETE', headers })
@@ -359,14 +359,14 @@ export async function clearAllUsers(): Promise<boolean> {
   }
 }
 
-export async function updateUnlockCount(userId: number, delta: number): Promise<boolean> {
+export async function updateUnlockCount(tableName: string, userId: number, delta: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const userRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=unlock_count`, { headers })
+    const userRes = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=unlock_count`, { headers })
     if (!userRes.ok) return false
     const data = await userRes.json() as { unlock_count: number }[]
     const current = data[0]?.unlock_count || 0
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ unlock_count: Math.max(0, current + delta) }),
@@ -378,10 +378,10 @@ export async function updateUnlockCount(userId: number, delta: number): Promise<
   }
 }
 
-export async function setUnlockCount(userId: number, value: number): Promise<boolean> {
+export async function setUnlockCount(tableName: string, userId: number, value: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ unlock_count: value }),
@@ -396,7 +396,7 @@ export async function setUnlockCount(userId: number, value: number): Promise<boo
 export async function setGlobalUnlock(timestamp: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/global_unlock`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users_global_unlock`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ unlocked_at: new Date(timestamp).toISOString() }),
@@ -408,10 +408,10 @@ export async function setGlobalUnlock(timestamp: number): Promise<boolean> {
   }
 }
 
-export async function updateHideAgeStatus(userId: number, until: string | null): Promise<boolean> {
+export async function updateHideAgeStatus(tableName: string, userId: number, until: string | null): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ hide_age_until: until }),
@@ -423,10 +423,10 @@ export async function updateHideAgeStatus(userId: number, until: string | null):
   }
 }
 
-export async function updateUserRealPhoto(userId: number, hasRealPhoto: boolean): Promise<boolean> {
+export async function updateUserRealPhoto(tableName: string, userId: number, hasRealPhoto: boolean): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ has_real_photo: hasRealPhoto }),
@@ -515,10 +515,10 @@ export async function drawRaffleWinner(raffleId: number): Promise<{ user_id: num
   } catch { return null }
 }
 
-export async function setGridRowsUnlocked(userId: number, rows: number): Promise<boolean> {
+export async function setGridRowsUnlocked(tableName: string, userId: number, rows: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ grid_rows_unlocked: rows }),
@@ -552,10 +552,10 @@ export async function setRaffleDrawToNextWednesday(raffleId: number): Promise<bo
   }
 }
 
-export async function ensureFilterUnlock(userId: number): Promise<boolean> {
+export async function ensureFilterUnlock(tableName: string, userId: number): Promise<boolean> {
   if (!hasValidKey) return false
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=filters_unlocked_expires_at`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=filters_unlocked_expires_at`, { headers })
     if (!res.ok) return false
     const data = await res.json()
     if (!data || data.length === 0) return false
@@ -563,7 +563,7 @@ export async function ensureFilterUnlock(userId: number): Promise<boolean> {
     if (current) return true
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
       method: 'PATCH',
       headers: { ...headers, 'Prefer': 'return=minimal' },
       body: JSON.stringify({ filters_unlocked_expires_at: expiresAt }),

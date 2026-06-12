@@ -182,11 +182,11 @@ export function getZodiacEmoji(sign: string): string {
 
 // ─── fetchNearby — now accepts tableName to support multiple apps ──────────
 
-export async function fetchNearby(tableName: string, lat: number, lng: number, limit = 100): Promise<DbUser[]> {
+export async function fetchNearby( lat: number, lng: number, limit = 100): Promise<DbUser[]> {
   if (!hasValidKey) return []
   try {
     const cols = Object.keys({} as DbUser).join(',')
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?select=${cols}&limit=200`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?select=${cols}&limit=200`, { headers })
     if (!res.ok) {
       const err = await res.text()
       console.error(`fetchNearby failed: ${res.status} ${err.substring(0, 200)}`)
@@ -205,10 +205,10 @@ export async function fetchNearby(tableName: string, lat: number, lng: number, l
   }
 }
 
-export async function setOnlineStatus(tableName: string, userId: number, online: boolean) {
+export async function setOnlineStatus( userId: number, online: boolean) {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ is_online: online, updated_at: new Date().toISOString() })
@@ -218,10 +218,10 @@ export async function setOnlineStatus(tableName: string, userId: number, online:
   }
 }
 
-export async function upsertUser(tableName: string, profile: Partial<DbUser>) {
+export async function upsertUser( profile: Partial<DbUser>) {
   if (!hasValidKey) return
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users`, {
       method: 'POST',
       headers: { ...headers, 'Prefer': 'return=representation,resolution=merge-duplicates' },
       body: JSON.stringify(profile)
@@ -237,25 +237,25 @@ export async function upsertUser(tableName: string, profile: Partial<DbUser>) {
 export async function fetchGlobalUnlock(tableName: string) {
   if (!hasValidKey) return 0
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?select=pref_changed_at&order=pref_changed_at.desc&limit=1`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?select=pref_changed_at&order=pref_changed_at.desc&limit=1`, { headers })
     const data = await res.json()
     return data[0]?.pref_changed_at ? new Date(data[0].pref_changed_at).getTime() : 0
   } catch { return 0 }
 }
 
-export async function fetchUserUnlockStatus(tableName: string, userId: number) {
+export async function fetchUserUnlockStatus( userId: number) {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=edit_unlocked,edit_unlocked_expires_at,filters_unlocked,filters_unlocked_expires_at,grid_rows_unlocked`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}&select=edit_unlocked,edit_unlocked_expires_at,filters_unlocked,filters_unlocked_expires_at,grid_rows_unlocked`, { headers })
     const data = await res.json()
     return data[0] || null
   } catch { return null }
 }
 
-export async function setGridRowsUnlocked(tableName: string, userId: number, rows: number) {
+export async function setGridRowsUnlocked( userId: number, rows: number) {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ grid_rows_unlocked: rows })
@@ -268,7 +268,7 @@ export async function setGridRowsUnlocked(tableName: string, userId: number, row
 export async function setFiltersUnlocked(tableName: string, userId: number, unlocked: boolean, expiresAt?: string) {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ filters_unlocked: unlocked, filters_unlocked_expires_at: expiresAt || null })
@@ -278,10 +278,10 @@ export async function setFiltersUnlocked(tableName: string, userId: number, unlo
   }
 }
 
-export async function ensureFilterUnlock(tableName: string, userId: number) {
+export async function ensureFilterUnlock( userId: number) {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ filters_unlocked: true })
@@ -291,10 +291,10 @@ export async function ensureFilterUnlock(tableName: string, userId: number) {
   }
 }
 
-export async function updateInvisibleStatus(tableName: string, userId: number, until: string | null) {
+export async function updateInvisibleStatus( userId: number, until: string | null) {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ invisible_until: until, invisible_purchased_at: until ? new Date().toISOString() : null })
@@ -423,19 +423,19 @@ export async function completeRaffle(raffleId: number, winnerId: number) {
 
 // ─── Real Photo Check ─────────────────────────────────────────────────────
 
-export async function checkRealPhoto(tableName: string, userId: number): Promise<boolean | null> {
+export async function checkRealPhoto( userId: number): Promise<boolean | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=has_real_photo`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}&select=has_real_photo`, { headers })
     const data = await res.json()
     return data[0]?.has_real_photo ?? null
   } catch { return null }
 }
 
-export async function updateRealPhotoStatus(tableName: string, userId: number, status: boolean) {
+export async function updateRealPhotoStatus( userId: number, status: boolean) {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ has_real_photo: status, real_photo_checked_at: new Date().toISOString() })
@@ -445,19 +445,19 @@ export async function updateRealPhotoStatus(tableName: string, userId: number, s
   }
 }
 
-export async function fetchUserPhotoStatus(tableName: string, userId: number): Promise<{ has_real_photo: boolean | null; real_photo_checked_at: string | null } | null> {
+export async function fetchUserPhotoStatus( userId: number): Promise<{ has_real_photo: boolean | null; real_photo_checked_at: string | null } | null> {
   if (!hasValidKey) return null
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=has_real_photo,real_photo_checked_at`, { headers })
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}&select=has_real_photo,real_photo_checked_at`, { headers })
     const data = await res.json()
     return data[0] || null
   } catch { return null }
 }
 
-export async function relockUserFeatures(tableName: string, userId: number) {
+export async function relockUserFeatures( userId: number) {
   if (!hasValidKey) return
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/lmn_users?id=eq.${userId}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ edit_unlocked: false, filters_unlocked: false, grid_rows_unlocked: 0 })

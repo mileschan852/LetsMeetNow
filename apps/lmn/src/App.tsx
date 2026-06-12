@@ -23,7 +23,6 @@ import {
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
 
-const TABLE = 'lmn_users'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -1366,7 +1365,7 @@ export default function App() {
       storageSet(CLOUD.filtersUnlocked, 'true')
       storageSet(CLOUD.filtersUnlockedAt, String(now))
       if (userId) {
-        saveFiltersUnlocked(TABLE,userId, true, expiresAt)
+        saveFiltersUnlocked(userId, true, expiresAt)
       }
       return
     }
@@ -1390,7 +1389,7 @@ export default function App() {
             const expiresAt = new Date(now + 30 * 86400000).toISOString()
             storageSet(CLOUD.filtersUnlocked, 'true')
             storageSet(CLOUD.filtersUnlockedAt, String(now))
-            saveFiltersUnlocked(TABLE, userId, true, expiresAt)
+            saveFiltersUnlocked(userId, true, expiresAt)
           }
         })
       }
@@ -1462,7 +1461,7 @@ export default function App() {
         // Apply prize to winner
         if (raffle.prize_type === 'invisible') {
           const until = new Date(Date.now() + 30 * 86400000).toISOString()
-          await updateInvisibleStatus(TABLE, winner.user_id, until)
+          await updateInvisibleStatus(winner.user_id, until)
         }
       }
       const final = await getActiveRaffle()
@@ -1541,7 +1540,7 @@ export default function App() {
           await completeRaffle(raffle.id, winner.user_id, winner.name)
           if (raffle.prize_type === 'invisible') {
             const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            await updateInvisibleStatus(TABLE, winner.user_id, until)
+            await updateInvisibleStatus(winner.user_id, until)
           }
         }
         const final = await getActiveRaffle()
@@ -1562,7 +1561,7 @@ export default function App() {
       storageSet(CLOUD.gridRowsUnlocked, String(newRows))
       storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
       if (userId) {
-        await saveGridRowsUnlocked(TABLE,userId, newRows)
+        await saveGridRowsUnlocked(userId, newRows)
       }
       return
     }
@@ -1585,7 +1584,7 @@ export default function App() {
             setGridRowsUnlocked(newRows)
             storageSet(CLOUD.gridRowsUnlocked, String(newRows))
             storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
-            await saveGridRowsUnlocked(TABLE, userId, newRows)
+            await saveGridRowsUnlocked(userId, newRows)
           }
         })
       }
@@ -1632,7 +1631,7 @@ export default function App() {
             setInvisibleUntil(until)
             setInvisibleActive(true)
             storageSet(CLOUD.invisibleActive, 'true')
-            updateInvisibleStatus(TABLE, userId, until)
+            updateInvisibleStatus(userId, until)
           }
         })
       }
@@ -1711,22 +1710,22 @@ export default function App() {
         const runPhotoCheck = async () => {
           const uid = tgUserId.current
           if (!uid) return
-          const isRealNow = checkRealPhoto(TABLE,TABLE,photoUrl)
-          const dbStatus = await fetchUserPhotoStatus(TABLE, uid)
+          const isRealNow = checkRealPhoto(photoUrl)
+          const dbStatus = await fetchUserPhotoStatus(uid)
           if (dbStatus) {
             // If photo was real before but not now -> relock (background, no UI block)
             if (dbStatus.has_real_photo && !isRealNow) {
               console.log('[PhotoGate] Photo removed, relocking features')
-              await relockUserFeatures(TABLE,uid)
-              await updateRealPhotoStatus(TABLE,uid, false)
+              await relockUserFeatures(uid)
+              await updateRealPhotoStatus(uid, false)
             } else if (!dbStatus.has_real_photo && isRealNow) {
               // New real photo detected
-              await updateRealPhotoStatus(TABLE,uid, true)
+              await updateRealPhotoStatus(uid, true)
             }
             // If was real and still real -> no change
           } else {
             // No DB record -> first time
-            await updateRealPhotoStatus(TABLE,uid, isRealNow)
+            await updateRealPhotoStatus(uid, isRealNow)
           }
           // Also update the local profile
           setOwnProfile(prev => ({ ...prev, hasRealPhoto: isRealNow }))
@@ -1818,7 +1817,7 @@ export default function App() {
       // Sync unlock status from Supabase (handles refunds + cross-device)
       const syncUserId = tgUserId.current
       if (syncUserId) {
-        fetchUserUnlockStatus(TABLE,syncUserId).then(status => {
+        fetchUserUnlockStatus(syncUserId).then(status => {
           if (!status) return
           const now = Date.now()
           // Sync filters_unlocked
@@ -1857,7 +1856,7 @@ export default function App() {
               setInvisibleUntil(null)
               setInvisibleActive(false)
               storageSet(CLOUD.invisibleActive, 'false')
-              updateInvisibleStatus(TABLE, syncUserId, null)
+              updateInvisibleStatus(syncUserId, null)
             }
           }
         }).catch(err => console.error('fetchUserUnlockStatus error:', err))
@@ -1899,7 +1898,7 @@ export default function App() {
     if (!uid || !lat || !lng || !hasValidKey) return
 
     console.log('Auto upsert for user', uid, 'at', lat, lng)
-    upsertUser(TABLE,{
+    upsertUser({
       id: uid,
       name: ownProfile.name,
       photo_url: ownProfile.tgPhotoUrl || null,
@@ -1927,7 +1926,7 @@ export default function App() {
       console.log('Upsert result:', result ? `success id=${result.id}` : 'null')
       // Auto 7-day filter unlock for new users
       if (result && !result.filters_unlocked_expires_at) {
-        ensureFilterUnlock(TABLE,result.id).then(ok => {
+        ensureFilterUnlock(result.id).then(ok => {
           console.log('Auto filter unlock:', ok ? 'set 7 days' : 'failed')
         })
       }
@@ -1943,7 +1942,7 @@ export default function App() {
     if (!uid) return
 
     const ping = () => {
-      setOnlineStatus(TABLE, uid, true).catch(console.error)
+      setOnlineStatus(uid, true).catch(console.error)
     }
     ping()
     const heartbeat = setInterval(ping, 30000)
@@ -1960,7 +1959,7 @@ export default function App() {
     const lng = ownProfile.lng
     if (!lat || !lng) return
     setIsLoadingUsers(true)
-    fetchNearby('lmn_users', lat, lng).then(dbUsers => {
+    fetchNearby(lat, lng).then(dbUsers => {
       const myId = tgUserId.current
       const mapped = dbUsers.filter(u => u.id !== myId).map(u => dbToProfile(u, lat, lng))
       // Override own invisible status with local state (in case DB column missing)
@@ -2030,7 +2029,7 @@ export default function App() {
     // Sync to Supabase
     const uid = tgUserId.current
     if (uid && updated.lat && updated.lng) {
-      upsertUser(TABLE, {
+      upsertUser( {
         id: uid,
         name: updated.name,
         photo_url: updated.tgPhotoUrl || null,
@@ -2269,13 +2268,13 @@ export default function App() {
                   setInvisibleUntil(null)
                   setInvisibleActive(false)
                   storageSet(CLOUD.invisibleActive, 'false')
-                  if (tgUserId.current) updateInvisibleStatus(TABLE, tgUserId.current, null)
+                  if (tgUserId.current) updateInvisibleStatus(tgUserId.current, null)
                 } else {
                   const until = new Date(Date.now() + 30 * 86400000).toISOString()
                   setInvisibleUntil(until)
                   setInvisibleActive(true)
                   storageSet(CLOUD.invisibleActive, 'true')
-                  if (tgUserId.current) updateInvisibleStatus(TABLE, tgUserId.current, until)
+                  if (tgUserId.current) updateInvisibleStatus(tgUserId.current, until)
                 }
               } else if (hasPurchasedInvisible) {
                 // Non-admin + purchased: toggle active state only
