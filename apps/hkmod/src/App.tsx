@@ -1,4 +1,4 @@
-import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto } from 'dating-core'
+import { getTg, isInTelegram, getUserId, getTimeAgo, getDistance, formatDist, isUserActive, isPrefLocked, getDefaultLang, isAdminUser, detectRealPhoto, usePaymentUnlock } from 'dating-core'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import logoImg from './assets/hkmod-logo.png'
@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { upsertUser, fetchNearby, setOnlineStatus, fetchGlobalUnlock, hasValidKey, fetchUserUnlockStatus, insertFlyingMessage, fetchFlyingMessages, updateInvisibleStatus, getActiveRaffle, createRaffle, buyRaffleTicket, startRaffleCountdown, drawRaffleWinner, completeRaffle, checkRealPhoto, updateRealPhotoStatus, fetchUserPhotoStatus, relockUserFeatures, setRaffleDrawToNextWednesday, ensureFilterUnlock, setGridRowsUnlocked as saveGridRowsUnlocked, setFiltersUnlocked as saveFiltersUnlocked, type DbUser, type Raffle } from './lib/supabase'
-import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton } from 'dating-ui'
+import { LocationGate, FlyingMessagesOverlay, BottomNav, RaffleStatusDisplay, RaffleButton, UnlockTipCycle } from 'dating-ui'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -319,7 +319,6 @@ function PhotoOverlay({ user, onClose, onMessage, lang }: { user: UserProfile; o
                       alt={`${user.name} ${i + 1}`}
                       className={`max-w-full max-h-[65vh] object-contain transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}`}
                       draggable={false}
-                      referrerPolicy="no-referrer"
                       onLoad={() => setImgStates(prev => {
                         const next = [...prev]
                         next[i] = { ...next[i], loaded: true }
@@ -487,7 +486,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
     <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
       {/* Invisible eye icon — shown on own profile when invisible, or admin sees on all invisible users */}
       {user.isInvisible && (
-        <div className="absolute top-0.5 left-0.5 z-40 w-3 h-3 flex items-center justify-center rounded-full bg-purple-500/40 border border-purple-400/30 text-[7px]" title="Invisible">
+        <div className="absolute top-0.5 left-0.5 z-40 w-4 h-4 flex items-center justify-center rounded-full bg-purple-500/60 border border-purple-400/50 text-[10px] shadow-lg" title="Invisible">
           👁️‍🗨️
         </div>
       )}
@@ -500,8 +499,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
           style={{ transition: 'opacity 0.3s' }}
           onLoad={() => setImgLoaded(true)}
           onError={() => setImgFailed(true)}
-          loading="eager"
-          referrerPolicy="no-referrer"
+          loading="lazy"
           draggable={false}
         />
       )}
@@ -515,9 +513,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
       {isUserActive(user) && (
         <div className="absolute top-0.5 right-0.5 w-2 h-2 bg-[#00D4AA] rounded-full online-pulse z-30" />
       )}
-      {user.openToMessages && (
-        <div className="absolute top-0.5 left-0.5 z-30 text-[8px] bg-black/50 rounded-full w-4 h-4 flex items-center justify-center">⭐</div>
-      )}
+
       {user.isOwn && (
         <div className="absolute inset-0 border-2 border-[#FF6B35] rounded-lg pointer-events-none z-30" />
       )}
@@ -537,7 +533,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
 
 // ─── Main Screen ──────────────────────────────────────────────────────
 
-function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, onPromptUnlockProfile, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
+function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWarning, isLoadingUsers, lang, setLang, onRefresh, isAdmin, filtersUnlocked, onPromptUnlock, onPromptFilterUnlock, onToggleInvisible, gridRowsUnlocked, lastRefreshTime, setLastRefreshTime, isInvisible, invisiblePurchased, raffle, onBuyRaffleTicket, onStartNextRaffle, isPremium, channelFollowUnlock, onClaimChannelFollow }: {
   ownProfile: UserProfile
   users: UserProfile[]
   onViewOwnProfile: () => void
@@ -560,7 +556,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
   raffle: Raffle | null
   onBuyRaffleTicket: () => void
   onStartNextRaffle: () => void
-  onPromptUnlockProfile: () => void
   isPremium: boolean
   channelFollowUnlock: number
   onClaimChannelFollow: () => void
@@ -754,15 +749,6 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
             👁️‍🗨️
           </button>
 
-          {/* Unlock profile lock — all users (admin free, others 100 Stars) */}
-          <button
-            onClick={onPromptUnlockProfile}
-            className="w-7 h-7 rounded-full bg-[#FF6B35]/20 border border-[#FF6B35]/30 flex items-center justify-center nav-press"
-            title={isAdmin ? 'Release Locks (Free)' : 'Unlock Profile (100 ⭐)'}
-          >
-            <span className="text-[10px]">🔓</span>
-          </button>
-
           <button
             onClick={() => {
               if (Date.now() - lastRefreshTime < 5 * 60 * 1000) return
@@ -788,7 +774,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
         <span className="text-[#2C2C2E]">|</span>
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
-        <span className="ml-1 text-[#5AC8FA]">v16.1H</span>
+        <span className="ml-1 text-[#5AC8FA]">v18.0H</span>
       </div>
 
       {showDbWarning && (
@@ -1014,12 +1000,11 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
 
 // ─── Own Profile Screen with SAVE button ──────────────────────────────
 
-function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }: {
+function OwnProfileScreen({ profile, onSave, onBack, lang }: {
   profile: UserProfile
   onSave: (updated: UserProfile) => void
   onBack: () => void
   lang: Lang
-  editProfileUnlocked: boolean
 }) {
   const [draft, setDraft] = useState<UserProfile>({ ...profile })
   const [saved, setSaved] = useState(false)
@@ -1067,53 +1052,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
   }
 
   const togglePref = (field: 'preference1' | 'preference2' | 'preference3' | 'preference4', a: string, b: string, c?: string) => {
-    // If edit profile unlocked via ⭐ button, skip all locks
-    if (editProfileUnlocked) {
-      if (c) {
-        const current = draft[field]
-        if (current === a) updateDraft(field, b)
-        else if (current === b) updateDraft(field, c)
-        else updateDraft(field, a)
-      } else {
-        updateDraft(field, draft[field] === a ? b : a)
-      }
-      return
-    }
-    // preference4 is always unlocked (two-state: Host <-> Travel, no monthly lock)
-    if (field !== 'preference4') {
-      // preference2: unlocked = free 3-state cycle; locked = Party↔Party✓ only
-      if (field === 'preference2') {
-        const current = draft.preference2
-        const locked = isPrefLocked(lastSavedAt, globalUnlockAt)
-        const isParty = (current === 'Party' || current === 'Party✓')
-
-        if (locked && !isParty) {
-          // Already Clean while locked — shouldn't happen, but block
-          alert(`${lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? 'Нельзя менять 30 дней' : 'Can only change every 30 days'}`)
-          return
-        }
-
-        if (locked && isParty) {
-          // Locked + Party/Party✓ → only toggle between Party↔Party✓
-          updateDraft('preference2', current === 'Party' ? 'Party✓' : 'Party')
-          return
-        }
-
-        // Unlocked — full 3-state cycle Clean → Party → Party✓ → Clean
-        if (current === 'Clean') updateDraft('preference2', 'Party')
-        else if (current === 'Party') updateDraft('preference2', 'Party✓')
-        else updateDraft('preference2', 'Clean')
-        return
-      }
-      // Check 30-day lock for preference1, preference3, role, stats
-      if (isPrefLocked(lastSavedAt, globalUnlockAt)) {
-        const labels: Record<string, string> = { preference1: 'Safe/Raw', preference3: '1on1/Group' }
-        alert(`${labels[field]}: ${lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? 'Нельзя менять 30 дней' : 'Can only change every 30 days'}`)
-        return
-      }
-    }
     if (c) {
-      // Three-state cycle: a -> b -> c -> a
       const current = draft[field]
       if (current === a) updateDraft(field, b)
       else if (current === b) updateDraft(field, c)
@@ -1190,7 +1129,6 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
                 src={currentPhoto}
                 alt="You"
                 className={`absolute inset-0 w-full h-full object-cover z-10 ${photoLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300 active:opacity-70`}
-                referrerPolicy="no-referrer"
                 draggable={false}
                 loading="eager"
                 decoding="async"
@@ -1221,9 +1159,9 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
               <span className="text-[#FF6B35] font-bold">{formatRole(draft.position, draft.isSide)}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <button onClick={() => togglePref('preference1', 'Safe', 'Raw')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference1 === 'Safe' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? '🔒' : ''}{tPref(lang, draft.preference1 || 'Safe')}</button>
-              <button onClick={() => togglePref('preference2', 'Clean', 'Party', 'Party✓')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference2 === 'Clean' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? 'opacity-40 pointer-events-none' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && draft.preference2 === 'Clean' ? '🔒' : ''}{tPref(lang, draft.preference2 || 'Clean')}</button>
-              <button onClick={() => togglePref('preference3', '1on1', 'Group')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference3 === '1on1' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'} ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40' : ''}`}>{isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? '🔒' : ''}{tPref(lang, draft.preference3 || '1on1')}</button>
+              <button onClick={() => togglePref('preference1', 'Safe', 'Raw')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference1 === 'Safe' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{tPref(lang, draft.preference1 || 'Safe')}</button>
+              <button onClick={() => togglePref('preference2', 'Clean', 'Party', 'Party✓')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference2 === 'Clean' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>{tPref(lang, draft.preference2 || 'Clean')}</button>
+              <button onClick={() => togglePref('preference3', '1on1', 'Group')} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference3 === '1on1' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-orange-500/20 text-orange-400'}`}>{tPref(lang, draft.preference3 || '1on1')}</button>
               <button onClick={cyclePref4} className={`text-[10px] font-bold px-2 py-0.5 rounded-full nav-press ${draft.preference4 === 'Host' ? 'bg-indigo-500/20 text-indigo-400' : draft.preference4 === 'Travel' ? 'bg-cyan-500/20 text-cyan-400' : draft.preference4 === 'Outdoor' ? 'bg-lime-500/20 text-lime-400' : 'bg-amber-500/20 text-amber-400'}`}>{tPref(lang, draft.preference4 || 'Travel')}</button>
               <span className="text-[9px] text-[#8E8E93] ml-1">👆 Click to change</span>
             </div>
@@ -1236,9 +1174,8 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')} / {t(lang, 'weight')}</span>
-            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
           </div>
-          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div className="flex gap-2">
             <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
               <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')}</span>
               <input type="number" value={draft.height || ''} placeholder="0"
@@ -1260,9 +1197,8 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         <div className="space-y-2 mb-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'role') || 'Role'}</span>
-            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
           </div>
-          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div className="flex gap-2">
             <button onClick={() => updateDraft('isSide', false)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${!draft.isSide ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
               {formatRole(draft.position, false)}
             </button>
@@ -1272,7 +1208,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
           </div>
 
           {!draft.isSide && (
-            <div className={`space-y-1 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className="space-y-1">
               <div className="flex items-center justify-between text-[10px] text-[#8E8E93]">
                 <span>{t(lang, 'bottom0')}</span>
                 <span className="text-white font-bold text-xs">{draft.position.toFixed(1)}</span>
@@ -1341,7 +1277,6 @@ export default function App() {
   const [lang, setLang] = useState<Lang>(getDefaultLang())
   const [starsPaidFor, setStarsPaidFor] = useState<Set<string>>(new Set())
   const [filtersUnlocked, setFiltersUnlocked] = useState(false)
-  const [editProfileUnlocked] = useState(false)
   const [gridRowsUnlocked, setGridRowsUnlocked] = useState(0)
   const [channelFollowUnlock, setChannelFollowUnlock] = useState(0)
   const [isPremium, setIsPremium] = useState(false)
@@ -1355,42 +1290,8 @@ export default function App() {
   const [flyingMessages, setFlyingMessages] = useState<{id: number; text: string; top: string}[]>([])
   const lastFlyingSendRef = useRef(0) // 1 min cooldown per user
 
-
   // "Show More Users" button → unlock +1 grid row (5 users)
   // Admin skips payment, regular users pay 1000 Stars
-
-  // ─── Unlock Profile Lock — 100 Stars for non-admin ─────────────────
-  // @ts-ignore - used as prop for MainScreen
-  const promptUnlockProfile = useCallback(async () => {
-    if (isAdmin) {
-      setAdminAction('release')
-      return
-    }
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 100, purpose: 'edit' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
-          if (status === 'paid') {
-            await storageSet(CLOUD.prefLockedAt, '0')
-            alert('Profile lock released! Refresh to apply.')
-            window.location.reload()
-          }
-        })
-      }
-    } catch { /* Worker failed */ }
-  }, [isAdmin])
 
   // ─── Raffle (Prize Draw) handlers ──────────────────────────────────
 
@@ -1499,45 +1400,31 @@ export default function App() {
     return () => clearInterval(interval)
   }, [raffle?.status, raffle?.ends_at, raffle?.id, raffle?.prize_type])
 
-  const promptUnlock = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    // Admin bypass: skip Stars payment, unlock directly
-    if (isAdmin) {
+  const promptUnlock = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    amount: 1000,
+    purpose: 'grid',
+    onAdminUnlock: useCallback(() => {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
       storageSet(CLOUD.gridRowsUnlocked, String(newRows))
       storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
-      if (userId) {
-        await saveGridRowsUnlocked(userId, newRows)
-      }
-      return
-    }
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 1000, purpose: 'grid' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
-          if (status === 'paid') {
-            const newRows = gridRowsUnlocked + 1
-            setGridRowsUnlocked(newRows)
-            storageSet(CLOUD.gridRowsUnlocked, String(newRows))
-            storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
-            await saveGridRowsUnlocked(userId, newRows)
-          }
-        })
-      }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+      const uid = getUserId()
+      if (uid) saveGridRowsUnlocked(uid, newRows)
+    }, [gridRowsUnlocked]),
+    onPaymentSuccess: useCallback(() => {
+      const newRows = gridRowsUnlocked + 1
+      setGridRowsUnlocked(newRows)
+      storageSet(CLOUD.gridRowsUnlocked, String(newRows))
+      storageSet(CLOUD.gridRowsUnlockedAt, String(Date.now()))
+      const uid = getUserId()
+      if (uid) saveGridRowsUnlocked(uid, newRows)
+    }, [gridRowsUnlocked]),
+    onError: useCallback((err) => {
+      console.error('Grid unlock payment error:', err)
+    }, []),
+  })
 
   // Admin re-check: if user data arrives late (e.g. bot menu open), re-check admin status
   useEffect(() => {
@@ -1555,48 +1442,33 @@ export default function App() {
     return () => clearInterval(interval)
   }, [isAdmin])
 
-  // ─── Filter unlock: purchase 30-day filter access ──────────────────
-  const promptFilterUnlock = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    // Admin bypass: skip Stars payment, unlock directly
-    if (isAdmin) {
+  const promptFilterUnlock = usePaymentUnlock({
+    isAdmin,
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    amount: 500,
+    purpose: 'filters',
+    onAdminUnlock: useCallback(() => {
       setFiltersUnlocked(true)
       const now = Date.now()
       const expiresAt = new Date(now + 30 * 86400000).toISOString()
       storageSet(CLOUD.filtersUnlocked, 'true')
       storageSet(CLOUD.filtersUnlockedAt, String(now))
-      if (userId) {
-        saveFiltersUnlocked(userId, true, expiresAt)
-      }
-      return
-    }
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 500, purpose: 'filters' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status) => {
-          if (status === 'paid') {
-            setFiltersUnlocked(true)
-            const now = Date.now()
-            const expiresAt = new Date(now + 30 * 86400000).toISOString()
-            storageSet(CLOUD.filtersUnlocked, 'true')
-            storageSet(CLOUD.filtersUnlockedAt, String(now))
-            saveFiltersUnlocked(userId, true, expiresAt)
-          }
-        })
-      }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+      const uid = getUserId()
+      if (uid) saveFiltersUnlocked(uid, true, expiresAt)
+    }, []),
+    onPaymentSuccess: useCallback(() => {
+      setFiltersUnlocked(true)
+      const now = Date.now()
+      const expiresAt = new Date(now + 30 * 86400000).toISOString()
+      storageSet(CLOUD.filtersUnlocked, 'true')
+      storageSet(CLOUD.filtersUnlockedAt, String(now))
+      const uid = getUserId()
+      if (uid) saveFiltersUnlocked(uid, true, expiresAt)
+    }, []),
+    onError: useCallback((err) => {
+      console.error('Filter unlock payment error:', err)
+    }, []),
+  })
 
   const handleClaimChannelFollow = useCallback(async () => {
     if (channelFollowUnlock) return
@@ -1614,35 +1486,24 @@ export default function App() {
   }, [channelFollowUnlock])
 
   // Invisible mode payment — 2000 Stars for 30 days
-  // Admin gets it free
-  const promptInvisiblePayment = async () => {
-    const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch('https://hkmo-d.mileschan852.workers.dev/createinvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 2000, purpose: 'invisible' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg?.openInvoice) {
-        tg.openInvoice(data.invoice_url, (status) => {
-          if (status === 'paid') {
-            const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            setInvisibleUntil(until)
-            setInvisibleActive(true)
-            storageSet(CLOUD.invisibleActive, 'true')
-            updateInvisibleStatus(userId, until)
-          }
-        })
-      }
-    } catch { /* Worker failed, silently ignore */ }
-  }
+  const promptInvisiblePayment = usePaymentUnlock({
+    isAdmin: false, // Admin doesn't use this path - they get it free via toggle
+    workerUrl: 'https://hkmo-d.mileschan852.workers.dev/createinvoice',
+    amount: 2000,
+    purpose: 'invisible',
+    onAdminUnlock: useCallback(() => {}, []),
+    onPaymentSuccess: useCallback(() => {
+      const until = new Date(Date.now() + 30 * 86400000).toISOString()
+      setInvisibleUntil(until)
+      setInvisibleActive(true)
+      storageSet(CLOUD.invisibleActive, 'true')
+      const uid = getUserId()
+      if (uid) updateInvisibleStatus(uid, until)
+    }, []),
+    onError: useCallback((err) => {
+      console.error('Invisible payment error:', err)
+    }, []),
+  })
 
   const tgUserId = useRef<number | null>(null)
 
@@ -2271,7 +2132,6 @@ export default function App() {
             raffle={raffle}
             onBuyRaffleTicket={handleBuyRaffleTicket}
             onStartNextRaffle={handleStartNextRaffle}
-            onPromptUnlockProfile={promptUnlockProfile}
             isPremium={isPremium}
           />
         ) : (
@@ -2280,7 +2140,6 @@ export default function App() {
             onSave={handleSaveProfile}
             onBack={() => setView('MAIN')}
             lang={lang}
-            editProfileUnlocked={isAdmin || editProfileUnlocked}
           />
         )}
         {photoOverlay && (
