@@ -1081,12 +1081,13 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
   }
 
   const handleSave = async () => {
-    // Validation: required fields must be filled
-    if (!draft.height || draft.height <= 0 || !draft.weight || draft.weight <= 0) {
+    const statsLocked = (lastSavedAt > 0) && !editProfileUnlocked
+    // Validation: required fields must be filled (skip if already locked)
+    if (!statsLocked && (!draft.height || draft.height <= 0 || !draft.weight || draft.weight <= 0)) {
       alert(lang === 'tc' ? '請輸入身高和體重' : lang === 'sc' ? '请输入身高和体重' : lang === 'ru' ? 'Введите рост и вес' : 'Please enter height and weight')
       return
     }
-    if (!draft.isSide && (draft.position < 0 || draft.position > 1)) {
+    if (!statsLocked && !draft.isSide && (draft.position < 0 || draft.position > 1)) {
       alert(lang === 'tc' ? '請選擇角色' : lang === 'sc' ? '请选择角色' : lang === 'ru' ? 'Выберите роль' : 'Please select a role')
       return
     }
@@ -1185,9 +1186,9 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')} / {t(lang, 'weight')}</span>
-            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
+            {(lastSavedAt > 0) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '已鎖定' : lang === 'sc' ? '已锁定' : lang === 'ru' ? 'Заблокировано' : 'Locked'}</span>}
           </div>
-          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div className={`flex gap-2 ${(lastSavedAt > 0) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
             <div className="flex-1 flex items-center justify-between px-3 py-2.5 bg-[#1A1A1A] rounded-lg">
               <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'height')}</span>
               <input type="number" value={draft.height || ''} placeholder="0"
@@ -1209,9 +1210,9 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
         <div className="space-y-2 mb-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-[#8E8E93] font-medium uppercase">{t(lang, 'role') || 'Role'}</span>
-            {isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '30天內不可更改' : lang === 'sc' ? '30天内不可更改' : lang === 'ru' ? '30 дней' : 'Locked 30 days'}</span>}
+            {(lastSavedAt > 0) && !editProfileUnlocked && <span className="text-[10px] text-[#8E8E93]">🔒 {lang === 'tc' ? '已鎖定' : lang === 'sc' ? '已锁定' : lang === 'ru' ? 'Заблокировано' : 'Locked'}</span>}
           </div>
-          <div className={`flex gap-2 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+          <div className={`flex gap-2 ${(lastSavedAt > 0) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
             <button onClick={() => updateDraft('isSide', false)} className={`flex-1 h-10 rounded-lg text-xs font-bold transition-all nav-press ${!draft.isSide ? 'gradient-btn text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
               {formatRole(draft.position, false)}
             </button>
@@ -1221,7 +1222,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
           </div>
 
           {!draft.isSide && (
-            <div className={`space-y-1 ${isPrefLocked(lastSavedAt, globalUnlockAt) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className={`space-y-1 ${(lastSavedAt > 0) && !editProfileUnlocked ? 'opacity-40 pointer-events-none' : ''}`}>
               <div className="flex items-center justify-between text-[10px] text-[#8E8E93]">
                 <span>{t(lang, 'bottom0')}</span>
                 <span className="text-white font-bold text-xs">{draft.position.toFixed(1)}</span>
@@ -1963,6 +1964,35 @@ export default function App() {
   const handleSaveProfile = useCallback((updated: UserProfile) => {
     console.log('Saving profile:', { age: updated.age, height: updated.height, weight: updated.weight, position: updated.position, isSide: updated.isSide })
     setOwnProfile(updated)
+    // Also persist to DB immediately so stats survive cross-device / cache-clear
+    const uid = tgUserId.current
+    if (!uid || !hasValidKey) return
+    const dbUser: Partial<DbUser> = {
+      id: uid,
+      name: updated.name,
+      photo_url: updated.tgPhotoUrl || null,
+      height: updated.height,
+      weight: updated.weight,
+      position: updated.position,
+      is_side: updated.isSide,
+      preference1: updated.preference1 || 'Raw',
+      preference2: updated.preference2 || 'Party',
+      preference3: updated.preference3 || 'Group',
+      preference4: updated.preference4 || 'Travel',
+      open_to_messages: updated.openToMessages || false,
+      tg_username: updated.tgUsername || null,
+      is_online: true,
+      updated_at: new Date().toISOString(),
+    }
+    if (updated.lat && updated.lng) {
+      dbUser.lat = updated.lat
+      dbUser.lng = updated.lng
+    }
+    upsertUser(dbUser).then(result => {
+      console.log('handleSaveProfile upsert result:', result ? `success id=${result.id}` : 'null')
+    }).catch(err => {
+      console.error('handleSaveProfile upsert error:', String(err).substring(0, 200))
+    })
   }, [])
 
   // ─── Message handler ──────────────────────────────────────────────
