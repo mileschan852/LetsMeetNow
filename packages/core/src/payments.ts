@@ -1,71 +1,7 @@
-import { useCallback } from 'react'
-import { getTg, getUserId } from './storage'
+// Telegram Stars Payment Integration
+// Creates invoice via Cloudflare Worker, handles fulfillment via webhook
 
-export interface PaymentUnlockOptions {
-  isAdmin: boolean
-  workerUrl: string
-  amount: number
-  purpose: string
-  onAdminUnlock: () => void
-  onPaymentSuccess: () => void
-  onError?: (err: any) => void
-}
-
-export function usePaymentUnlock({
-  isAdmin,
-  workerUrl,
-  amount,
-  purpose,
-  onAdminUnlock,
-  onPaymentSuccess,
-  onError,
-}: PaymentUnlockOptions) {
-  return useCallback(async () => {
-    if (isAdmin) {
-      onAdminUnlock()
-      return
-    }
-
-    const userId = getUserId()
-    if (!userId) {
-      onError?.(new Error('Not logged in'))
-      return
-    }
-
-    const tg = getTg()
-    if (!tg) {
-      onError?.(new Error('Not in Telegram'))
-      return
-    }
-
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch(workerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount, purpose }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-
-      const data = await res.json()
-      if (data.ok && data.invoice_url && tg.openInvoice) {
-        tg.openInvoice(data.invoice_url, async (status: string) => {
-          if (status === 'paid') {
-            onPaymentSuccess()
-          } else {
-            onError?.(new Error(`Payment ${status}`))
-          }
-        })
-      } else {
-        onError?.(new Error(data.error || 'Failed to create invoice'))
-      }
-    } catch (err) {
-      onError?.(err)
-    }
-  }, [isAdmin, workerUrl, amount, purpose, onAdminUnlock, onPaymentSuccess, onError])
-}
+import { getTg } from './storage'
 
 export async function requestPayment(
   webhookUrl: string,
@@ -99,6 +35,7 @@ export async function requestPayment(
         }
       })
     } else {
+      // Fallback: redirect to invoice URL
       tg.openTelegramLink(data.result)
       onSuccess()
     }
