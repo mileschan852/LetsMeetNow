@@ -382,7 +382,6 @@ function PhotoOverlay({ user, onClose, onMessage, lang, ownProfile }: { user: Us
                       alt={`${user.name} ${i + 1}`}
                       className={`max-w-full max-h-[65vh] object-contain transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}`}
                       draggable={false}
-                      referrerPolicy="no-referrer"
                       onLoad={() => setImgStates(prev => {
                         const next = [...prev]
                         next[i] = { ...next[i], loaded: true }
@@ -607,7 +606,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
     <button onClick={onClick} className="card-enter tile-aspect rounded-lg overflow-hidden nav-press text-left" style={{ minHeight: '68px' }}>
       {/* Invisible eye icon — shown on own profile when invisible, or admin sees on all invisible users */}
       {user.isInvisible && (
-        <div className="absolute top-0.5 left-0.5 z-40 w-3 h-3 flex items-center justify-center rounded-full bg-purple-500/40 border border-purple-400/30 text-[7px]" title="Invisible">
+        <div className="absolute top-0.5 left-0.5 z-40 w-4 h-4 flex items-center justify-center rounded-full bg-purple-500/60 border border-purple-400/50 text-[10px] shadow-lg" title="Invisible">
           👁️‍🗨️
         </div>
       )}
@@ -621,7 +620,6 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
           onLoad={() => setImgLoaded(true)}
           onError={() => setImgFailed(true)}
           loading="eager"
-          referrerPolicy="no-referrer"
           draggable={false}
         />
       )}
@@ -769,7 +767,7 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         <div className="flex items-center gap-2">
           <img src={logoImg} alt="LMN" className="w-8 h-8 rounded-full object-cover" />
           <h1 className="text-xl font-bold gradient-text tracking-tight">LMN</h1>
-          <span className="ml-1 text-[#5AC8FA]">L1</span>
+          <span className="ml-1 text-[#5AC8FA]">v18.0L</span>
           <div className="w-px h-5 bg-[#2C2C2E] mx-0.5" />
           {/* Prize Draw (Raffle) button */}
           <RaffleButton
@@ -1141,7 +1139,7 @@ function OwnProfileScreen({ profile, onSave, onBack, lang, editProfileUnlocked }
               <img
                 src={currentPhoto} alt="You"
                 className={`absolute inset-0 w-full h-full object-cover z-10 ${photoLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300 active:opacity-70`}
-                referrerPolicy="no-referrer" draggable={false} loading="eager" decoding="async"
+                draggable={false} loading="eager" decoding="async"
                 onLoad={() => setPhotoLoaded(true)} onError={() => setPhotoLoaded(false)}
                 onClick={() => hasMultiplePhotos && setPhotoIndex((prev) => (prev + 1) % photos.length)}
               />
