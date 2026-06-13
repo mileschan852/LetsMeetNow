@@ -1710,30 +1710,12 @@ export default function App() {
           storageSet(CLOUD.photoUrl, photoUrl)
         }
         // Photo gate: check if user has a real photo on every login
-        const runPhotoCheck = async () => {
-          const uid = tgUserId.current
-          if (!uid) return
-          const isRealNow = checkRealPhoto(photoUrl)
-          const dbStatus = await fetchUserPhotoStatus(uid)
-          if (dbStatus) {
-            // If photo was real before but not now -> relock (background, no UI block)
-            if (dbStatus.has_real_photo && !isRealNow) {
-              console.log('[PhotoGate] Photo removed, relocking features')
-              await relockUserFeatures(uid)
-              await updateRealPhotoStatus(uid, false)
-            } else if (!dbStatus.has_real_photo && isRealNow) {
-              // New real photo detected
-              await updateRealPhotoStatus(uid, true)
-            }
-            // If was real and still real -> no change
-          } else {
-            // No DB record -> first time
-            await updateRealPhotoStatus(uid, isRealNow)
-          }
-          // Also update the local profile
-          setOwnProfile(prev => ({ ...prev, hasRealPhoto: isRealNow }))
+        const uid = tgUserId.current
+        if (uid) {
+          checkPhotoGate('lmn_users', uid, photoUrl).then(({ hasRealPhoto }) => {
+            setOwnProfile(prev => ({ ...prev, hasRealPhoto }))
+          })
         }
-        runPhotoCheck()
         // Legacy: also run detectRealPhoto for hasRealPhoto UI state
         detectRealPhoto(photoUrl).then(isReal => {
           setOwnProfile(prev => ({ ...prev, hasRealPhoto: isReal }))
