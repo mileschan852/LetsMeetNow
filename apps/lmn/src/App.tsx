@@ -598,6 +598,7 @@ function ProfileTile({ user, onClick }: { user: UserProfile; onClick?: () => voi
   const genderLabel = user.gender?.charAt(0) || '?'
 
   // Reset photo state when photo URL changes
+  // Do NOT check imgRef here — let onLoad/onError handle the new image
   useEffect(() => {
     setImgLoaded(false)
     setImgFailed(false)
