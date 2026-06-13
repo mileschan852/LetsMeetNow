@@ -574,3 +574,69 @@ export async function ensureFilterUnlock(tableName: string, userId: number): Pro
     return false
   }
 }
+
+export async function setFiltersUnlocked(tableName: string, userId: number, unlocked: boolean, expiresAt?: string): Promise<boolean> {
+  if (!hasValidKey) return false
+  try {
+    const body: Record<string, unknown> = { filters_unlocked: unlocked }
+    if (expiresAt !== undefined) body.filters_unlocked_expires_at = expiresAt || null
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(body),
+    })
+    return res.ok
+  } catch (err) {
+    console.error('setFiltersUnlocked failed:', err)
+    return false
+  }
+}
+
+
+// ─── Factory: createSupabaseClient ─────────────────────────────────────
+// Returns all table-specific functions pre-bound to the given table name.
+// Usage: export const { fetchNearby, upsertUser, ... } = createSupabaseClient('lmn_users')
+
+export interface SupabaseClient {
+  upsertUser: (user: Partial<DbUser>) => Promise<DbUser | null>
+  fetchNearby: (lat: number, lng: number, limit?: number) => Promise<DbUser[]>
+  setOnlineStatus: (userId: number, isOnline: boolean) => Promise<void>
+  deleteUser: (userId: number) => Promise<boolean>
+  clearAllUsers: () => Promise<boolean>
+  fetchGlobalUnlock: () => Promise<number>
+  fetchUserUnlockStatus: (userId: number) => Promise<{ edit_unlocked: boolean | null, edit_unlocked_expires_at: string | null, filters_unlocked: boolean | null, filters_unlocked_expires_at: string | null, grid_rows_unlocked: number | null } | null>
+  updateUserRealPhoto: (userId: number, hasRealPhoto: boolean) => Promise<boolean>
+  setGridRowsUnlocked: (userId: number, rows: number) => Promise<boolean>
+  setFiltersUnlocked: (userId: number, unlocked: boolean, expiresAt?: string) => Promise<boolean>
+  updateInvisibleStatus: (userId: number, until: string | null) => Promise<boolean>
+  updateHideAgeStatus: (userId: number, until: string | null) => Promise<boolean>
+  updateUnlockCount: (userId: number, delta: number) => Promise<boolean>
+  setUnlockCount: (userId: number, value: number) => Promise<boolean>
+  relockUserFeatures: (userId: number) => Promise<boolean>
+  ensureFilterUnlock: (userId: number) => Promise<boolean>
+  updateRealPhotoStatus: (userId: number, hasRealPhoto: boolean) => Promise<boolean>
+  fetchUserPhotoStatus: (userId: number) => Promise<{ has_real_photo: boolean } | null>
+}
+
+export function createSupabaseClient(tableName: string): SupabaseClient {
+  return {
+    upsertUser: (user) => upsertUser(tableName, user),
+    fetchNearby: (lat, lng, limit = 100) => fetchNearby(tableName, lat, lng, limit),
+    setOnlineStatus: (userId, isOnline) => setOnlineStatus(tableName, userId, isOnline),
+    deleteUser: (userId) => deleteUser(tableName, userId),
+    clearAllUsers: () => clearAllUsers(tableName),
+    fetchGlobalUnlock: () => fetchGlobalUnlock(tableName),
+    fetchUserUnlockStatus: (userId) => fetchUserUnlockStatus(tableName, userId),
+    updateUserRealPhoto: (userId, hasRealPhoto) => updateUserRealPhoto(tableName, userId, hasRealPhoto),
+    setGridRowsUnlocked: (userId, rows) => setGridRowsUnlocked(tableName, userId, rows),
+    setFiltersUnlocked: (userId, unlocked, expiresAt) => setFiltersUnlocked(tableName, userId, unlocked, expiresAt),
+    updateInvisibleStatus: (userId, until) => updateInvisibleStatus(tableName, userId, until),
+    updateHideAgeStatus: (userId, until) => updateHideAgeStatus(tableName, userId, until),
+    updateUnlockCount: (userId, delta) => updateUnlockCount(tableName, userId, delta),
+    setUnlockCount: (userId, value) => setUnlockCount(tableName, userId, value),
+    relockUserFeatures: (userId) => relockUserFeatures(tableName, userId),
+    ensureFilterUnlock: (userId) => ensureFilterUnlock(tableName, userId),
+    updateRealPhotoStatus: (userId, hasRealPhoto) => updateRealPhotoStatus(tableName, userId, hasRealPhoto),
+    fetchUserPhotoStatus: (userId) => fetchUserPhotoStatus(tableName, userId),
+  }
+}
