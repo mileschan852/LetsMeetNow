@@ -101,7 +101,7 @@ export async function upsertUser(tableName: string, user: Partial<DbUser>): Prom
 export async function fetchNearby(tableName: string, lat: number, lng: number, limit = 100): Promise<DbUser[]> {
   if (!hasValidKey) return []
   try {
-    const cols = Object.keys({} as DbUser).join(',')
+    const cols = 'id,name,photo_url,height,weight,position,is_side,preference1,preference2,preference3,preference4,open_to_messages,lat,lng,tg_username,is_online,updated_at,unlock_count,filters_unlocked,filters_unlocked_expires_at,edit_unlocked,edit_unlocked_expires_at,grid_rows_unlocked,has_real_photo,invisible_until,invisible_purchased_at,dob,gender,seeking_gender,seeking_today,meetup_type,hide_age'
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?select=${cols}&limit=200`, { headers })
     if (!res.ok) {
       const err = await res.text()
