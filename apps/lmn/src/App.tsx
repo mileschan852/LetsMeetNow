@@ -840,13 +840,16 @@ function MainScreen({ ownProfile, users, onViewOwnProfile, onViewPhoto, showDbWa
         </div>
       </div>
 
-      {/* User stats bar — compact: total rows only, cycle unlock tips on tap */}
-      <div className="px-3 pt-1 flex items-center gap-2 text-[10px] text-[#8E8E93]">
-        <span className="text-[#FF6B35] font-bold">{lang === 'tc' ? '已解鎖行數' : lang === 'sc' ? '已解锁行数' : 'Rows'}: {2 + (isPremium ? 1 : 0) + gridRowsUnlocked + channelFollowUnlock}</span>
-        <span className="text-[#2C2C2E]">|</span>
+      {/* User stats bar — shared component */}
+      <StatsBar
+        lang={lang}
+        isPremium={isPremium}
+        gridRowsUnlocked={gridRowsUnlocked}
+        channelFollowUnlock={channelFollowUnlock}
+        appVersion="1L"
+      >
         <UnlockTipCycle lang={lang} isPremium={isPremium} gridRowsUnlocked={gridRowsUnlocked} channelFollowUnlock={channelFollowUnlock} onClaimChannelFollow={onClaimChannelFollow} />
-        <span className="ml-1 text-[#5AC8FA]">v18.1L</span>
-      </div>
+      </StatsBar>
 
       {showDbWarning && (
         <div className="mx-3 mt-2 bg-[#FF6B35]/10 border border-[#FF6B35]/30 rounded-lg px-3 py-2 flex items-start gap-2">
